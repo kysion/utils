@@ -1,15 +1,13 @@
 /**
  * 常用验证工具函数
  */
-
 export const regexMatch = {
     // 验证手机号
     mobile: /^((1[3-9]\d{9})|(1[3-9]\d{1}[*]{6}[0-9]{2}))$/,
     // 验证邀请码
     invite: /^[0-9A-Za-z]{6}/,
     // 验证邮箱
-    email:
-        /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/,
+    email: /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/,
     // 验证密码
     password: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/,
     // 验证用户名
@@ -23,63 +21,61 @@ export const regexMatch = {
     // 身份证验证
     idCardRegex: /^[1-9]\d{5}(18|19|20)\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\d{3}[0-9Xx]$/
 };
-
-
 /**
  * 验证中国大陆手机号格式
  * @param mobile 手机号
  * @returns 是否符合格式
  */
-export const isValidChineseMobile = (mobile: string): boolean => {
+export const isValidChineseMobile = (mobile) => {
     return regexMatch.mobile.test(mobile);
 };
-
 /**
  * 验证邮箱格式
  * @param email 邮箱
  * @returns 是否符合格式
  */
-export const isValidEmail = (email: string): boolean => {
+export const isValidEmail = (email) => {
     return regexMatch.email.test(email);
 };
-
 /**
  * 验证用户名格式(字母开头，允许字母、数字、下划线，长度5-20)
  * @param username 用户名
  * @returns 是否符合格式
  */
-export const isValidUsername = (username: string): boolean => {
+export const isValidUsername = (username) => {
     return regexMatch.username.test(username);
 };
-
 /**
  * 验证密码强度
  * @param password 密码
  * @returns 密码强度级别: 0-弱, 1-中, 2-强
  */
-export const getPasswordStrength = (password: string): number => {
-    if (password.length < 6) return 0;
-
+export const getPasswordStrength = (password) => {
+    if (password.length < 6)
+        return 0;
     let strength = 0;
     // 包含数字
-    if (/\d/.test(password)) strength++;
+    if (/\d/.test(password))
+        strength++;
     // 包含小写字母
-    if (/[a-z]/.test(password)) strength++;
+    if (/[a-z]/.test(password))
+        strength++;
     // 包含大写字母
-    if (/[A-Z]/.test(password)) strength++;
+    if (/[A-Z]/.test(password))
+        strength++;
     // 包含特殊字符
-    if (/[^a-zA-Z0-9]/.test(password)) strength++;
-
+    if (/[^a-zA-Z0-9]/.test(password))
+        strength++;
     // 根据密码长度和包含的字符类型评估强度
     if (password.length >= 10 && strength >= 3) {
         return 2; // 强
-    } else if (password.length >= 8 && strength >= 2) {
+    }
+    else if (password.length >= 8 && strength >= 2) {
         return 1; // 中
     }
     return 0; // 弱
 };
-
-export function validateDate(str: string): boolean {
+export function validateDate(str) {
     // 定义一个名为 `validateDate` 的函数，它接受一个字符串参数 `str`，并返回一个布尔值
     const dateFormats = [
         // 定义一个数组 `dateFormats`，其中包含了各种可能的日期格式的正则表达式
@@ -114,7 +110,6 @@ export function validateDate(str: string): boolean {
         /^\d{4}年\d{1,2}月\d{1,2}日\s\d{1,2}:\d{1,2}:\d{1,2}\.\d{1,3}$/
         // 匹配类似于 "YYYY 年 MM 月 DD 日 HH:mm:ss.SSS" 的中文格式
     ];
-
     for (const format of dateFormats) {
         // 遍历 `dateFormats` 数组中的每个正则表达式
         if (format.test(str)) {
@@ -123,7 +118,6 @@ export function validateDate(str: string): boolean {
             // 则返回 `true`，表示输入的字符串是有效的日期格式
         }
     }
-
     // 如果遍历完所有的正则表达式都没有匹配成功，则返回 `false`，表示输入的字符串不是有效的日期格式
     return false;
 }

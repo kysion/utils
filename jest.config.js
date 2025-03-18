@@ -27,12 +27,6 @@ module.exports = {
     '/es/',
     '/lib/'
   ],
-  globals: {
-    // 为 import.meta 提供模拟值
-    'ts-jest': {
-      useESM: true,
-    },
-  },
   // 模拟 import.meta
   setupFiles: ['<rootDir>/jest.setup.js'],
 }; 
