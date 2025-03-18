@@ -5,6 +5,7 @@
 ## 目录
 
 - [HTTP请求模块](#http请求模块)
+- [文件上传下载](#文件上传下载)
 - [存储模块](#存储模块)
 - [模型存储](#模型存储)
 - [工具函数](#工具函数)
@@ -138,6 +139,245 @@ http.cancel('users-list', '用户取消请求');
 
 // 取消所有请求
 http.cancelAll('页面已离开');
+```
+
+<a id="文件上传下载"></a>
+
+## 文件上传下载
+
+文件上传下载模块提供了强大的文件处理功能，支持基本上传下载、大文件分块传输、断点续传和进度监控。
+
+### 文件上传
+
+#### 基本文件上传
+
+适用于小文件的简单上传，支持进度监控：
+
+```typescript
+import { HttpClient } from '@kysion/utils';
+
+const http = new HttpClient();
+
+// 从文件输入获取文件
+const fileInput = document.querySelector('input[type="file"]');
+const file = fileInput.files[0];
+
+// 基本文件上传
+const result = await http.upload('/api/upload', file, {
+  // 额外表单数据
+  data: {
+    category: 'documents',
+    tags: ['important', 'report']
+  },
+  // 进度回调
+  onUploadProgress: (event) => {
+    const percent = Math.round((event.loaded / event.total) * 100);
+    console.log(`上传进度: ${percent}%`);
+  }
+});
+
+console.log('上传完成，文件ID:', result.fileId);
+```
+
+#### 增强的进度信息
+
+使用 `onUploadProgressInfo` 获取更多进度详情，包括速度和剩余时间估计：
+
+```typescript
+await http.upload('/api/upload', file, {
+  onUploadProgressInfo: (info) => {
+    console.log(`上传进度: ${info.percent}%`);
+    console.log(`上传速度: ${info.speed} bytes/s`);
+    console.log(`预计剩余时间: ${info.remainingTime} 秒`);
+  },
+  // 是否计算速度和剩余时间（当指定onUploadProgressInfo时默认为true）
+  calculateSpeed: true
+});
+```
+
+#### 大文件分块上传
+
+对于大文件，自动分块上传可以提高可靠性和性能：
+
+```typescript
+// 大文件分块上传
+const largeFile = new File([largeArrayBuffer], 'large-video.mp4');
+
+const result = await http.uploadLargeFile('/api/upload/large', largeFile, {
+  // 分块大小，默认1MB
+  chunkSize: 2 * 1024 * 1024, // 2MB
+  
+  // 并发上传数，默认3
+  concurrency: 4,
+  
+  // 进度回调
+  onUploadProgressInfo: (info) => {
+    console.log(`上传进度: ${info.percent}%`);
+    console.log(`上传速度: ${info.speed} bytes/s`);
+  }
+});
+```
+
+#### 断点续传
+
+支持因网络中断等原因导致的上传恢复：
+
+```typescript
+// 存储上传状态，用于恢复
+let resumeInfo;
+
+try {
+  await http.uploadLargeFile('/api/upload/large', largeFile, {
+    // 指定请求ID，用于取消
+    requestId: 'upload-task-123',
+    
+    // 监听中断事件
+    onChunkUploaded: (info) => {
+      // 保存断点续传信息
+      resumeInfo = {
+        fileId: info.fileId,
+        startByte: info.startByte,
+        totalBytes: info.totalBytes
+      };
+      localStorage.setItem('resumeInfo', JSON.stringify(resumeInfo));
+    }
+  });
+} catch (error) {
+  console.error('上传中断:', error);
+}
+
+// 稍后恢复上传
+if (resumeInfo) {
+  await http.uploadLargeFile('/api/upload/large', largeFile, {
+    resumeInfo: resumeInfo
+  });
+}
+```
+
+#### 取消上传
+
+```typescript
+const uploadRequestId = 'upload-task-123';
+
+// 开始上传
+http.uploadLargeFile('/api/upload/large', largeFile, {
+  requestId: uploadRequestId
+}).catch(error => {
+  if (axios.isCancel(error)) {
+    console.log('上传已取消');
+  }
+});
+
+// 在其他地方取消上传
+http.cancelRequest(uploadRequestId);
+```
+
+### 文件下载
+
+#### 基本文件下载
+
+```typescript
+// 简单文件下载
+const file = await http.download('/api/files/123', {
+  // 文件名（浏览器环境下会触发下载）
+  fileName: 'report.pdf',
+  
+  // 进度回调
+  onDownloadProgress: (event) => {
+    const percent = Math.round((event.loaded / event.total) * 100);
+    console.log(`下载进度: ${percent}%`);
+  }
+});
+
+// 浏览器环境下，文件已自动下载
+// Node环境下，返回Buffer
+```
+
+#### 增强的下载进度信息
+
+```typescript
+await http.download('/api/files/123', {
+  fileName: 'large-video.mp4',
+  onDownloadProgressInfo: (info) => {
+    console.log(`下载进度: ${info.percent}%`);
+    console.log(`下载速度: ${info.speed} bytes/s`);
+    console.log(`预计剩余时间: ${info.remainingTime} 秒`);
+  }
+});
+```
+
+#### 大文件分块下载
+
+```typescript
+// 大文件分块下载
+const file = await http.downloadLargeFile('/api/files/large/123', {
+  fileName: 'large-dataset.zip',
+  
+  // 分块大小，默认5MB
+  chunkSize: 10 * 1024 * 1024, // 10MB
+  
+  // 并发下载数，默认3
+  concurrency: 5,
+  
+  // 进度回调
+  onDownloadProgressInfo: (info) => {
+    console.log(`下载进度: ${info.percent}%`);
+    console.log(`下载速度: ${info.speed} bytes/s`);
+  }
+});
+```
+
+#### 断点续传下载
+
+```typescript
+// 存储下载状态
+let resumeInfo;
+
+try {
+  await http.downloadLargeFile('/api/files/large/123', {
+    requestId: 'download-task-123',
+    fileName: 'large-dataset.zip',
+    
+    // 监听块下载
+    onChunkDownloaded: (info) => {
+      resumeInfo = {
+        fileId: info.fileId,
+        startByte: info.startByte,
+        totalBytes: info.totalBytes
+      };
+      localStorage.setItem('downloadResumeInfo', JSON.stringify(resumeInfo));
+    }
+  });
+} catch (error) {
+  console.error('下载中断:', error);
+}
+
+// 稍后恢复下载
+if (resumeInfo) {
+  await http.downloadLargeFile('/api/files/large/123', {
+    fileName: 'large-dataset.zip',
+    resumeInfo: resumeInfo
+  });
+}
+```
+
+#### 取消下载
+
+```typescript
+const downloadRequestId = 'download-task-123';
+
+// 开始下载
+http.downloadLargeFile('/api/files/large/123', {
+  requestId: downloadRequestId,
+  fileName: 'large-dataset.zip'
+}).catch(error => {
+  if (axios.isCancel(error)) {
+    console.log('下载已取消');
+  }
+});
+
+// 在其他地方取消下载
+http.cancelRequest(downloadRequestId);
 ```
 
 <a id="存储模块"></a>

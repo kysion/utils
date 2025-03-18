@@ -2,8 +2,8 @@
  * HTTP请求模块入口文件
  */
 
-import HttpClient from './HttpClient';
-import { getCacheKey, getCache, setCache, clearCache, clearAllCache, clearExpiredCache } from './cache';
+import { HttpClient } from './HttpClient';
+import { getCacheKey, getCache, setCache, clearCache, clearAllCache, clearExpiredCache, clearCacheByUrl, getUrlFromCacheKey, getMethodFromCacheKey } from './cache';
 import {
     configureHttp,
     resetHttpConfig,
@@ -22,8 +22,66 @@ import type {
     RequestInterceptor,
     ResponseInterceptor,
     ErrorInterceptor,
-    HttpGlobalConfig
+    HttpGlobalConfig,
+    UploadProgressInfo,
+    DownloadProgressInfo,
+    ResumeInfo
 } from './types';
+
+// 创建默认的HTTP客户端实例
+let http = null;
+
+// 检查环境
+const isBrowser = typeof window !== 'undefined';
+const isTestEnv = process?.env?.NODE_ENV === 'test';
+
+// 只在浏览器环境中创建HTTP实例
+if (isBrowser && !isTestEnv) {
+    try {
+        // 创建单例实例
+        if (!HttpClient.instance) {
+            http = new HttpClient();
+            // 手动设置单例实例
+            HttpClient.instance = http;
+        } else {
+            http = HttpClient.instance;
+        }
+    } catch (error) {
+        console.warn('无法创建默认HTTP客户端实例:', error);
+    }
+} else {
+    // 在非浏览器环境或测试环境中，不创建HTTP实例
+    console.info('在非浏览器环境或测试环境中不创建HTTP客户端实例');
+}
+
+/**
+ * 获取HttpClient实例
+ * @param config 配置（可选）
+ * @returns HttpClient实例
+ */
+export const getHttpInstance = (config?: HttpRequestConfig): HttpClient => {
+    if (!HttpClient.instance) {
+        HttpClient.instance = new HttpClient(config);
+    }
+    return HttpClient.instance;
+};
+
+/**
+ * 更新HttpClient实例配置
+ * @param config 配置
+ * @returns 更新后的HttpClient实例
+ */
+export const updateHttpConfig = (config: Partial<HttpRequestConfig>): HttpClient => {
+    if (!HttpClient.instance) {
+        HttpClient.instance = new HttpClient(config);
+    } else {
+        HttpClient.instance.updateConfig(config);
+    }
+    return HttpClient.instance;
+};
+
+// 导出http实例
+export { http };
 
 // 导出类和函数
 export {
@@ -34,6 +92,9 @@ export {
     clearCache,
     clearAllCache,
     clearExpiredCache,
+    clearCacheByUrl,
+    getUrlFromCacheKey,
+    getMethodFromCacheKey,
     defaultInterceptors,
     requestInterceptor,
     responseInterceptor,
@@ -55,32 +116,11 @@ export type {
     RequestInterceptor,
     ResponseInterceptor,
     ErrorInterceptor,
-    HttpGlobalConfig
+    HttpGlobalConfig,
+    UploadProgressInfo,
+    DownloadProgressInfo,
+    ResumeInfo
 };
-
-// 创建默认的HTTP客户端实例
-let http = null;
-
-// 检查环境
-const isBrowser = typeof window !== 'undefined';
-const isTestEnv = process?.env?.NODE_ENV === 'test';
-
-// 只在浏览器环境中创建HTTP实例
-if (isBrowser && !isTestEnv) {
-    try {
-        // 直接使用导入的HttpClient类
-        http = new HttpClient();
-    } catch (error) {
-        console.warn('无法创建默认HTTP客户端实例:', error);
-    }
-} else {
-    // 在非浏览器环境或测试环境中，不创建HTTP实例
-    console.info('在非浏览器环境或测试环境中不创建HTTP客户端实例');
-}
-export { http };
-
-// 默认导出
-export default HttpClient;
 
 /**
  * 导出默认HTTP方法
@@ -99,3 +139,32 @@ export const put = http ? http.put.bind(http) : null;
 export const del = http ? http.delete.bind(http) : null;
 export const patch = http ? http.patch.bind(http) : null;
 export const request = http ? http.request.bind(http) : null;
+
+/**
+ * 导出文件上传下载方法
+ * 
+ * 使用示例:
+ * 
+ * // 上传文件
+ * const file = document.querySelector('input[type="file"]').files[0];
+ * const result = await upload('/api/upload', file, {
+ *   onUploadProgressInfo: (info) => {
+ *     console.log(`上传进度: ${info.percent}%, 速度: ${info.speed} bytes/s`);
+ *   }
+ * });
+ * 
+ * // 下载文件
+ * const blob = await download('/api/files/123', {
+ *   fileName: 'document.pdf',
+ *   onDownloadProgressInfo: (info) => {
+ *     console.log(`下载进度: ${info.percent}%`);
+ *   }
+ * });
+ */
+export const upload = http ? http.upload.bind(http) : null;
+export const uploadLargeFile = http ? http.uploadLargeFile.bind(http) : null;
+export const download = http ? http.download.bind(http) : null;
+export const downloadLargeFile = http ? http.downloadLargeFile.bind(http) : null;
+
+// 导出HTTP客户端方法
+export const clearCacheByPattern = http ? http.clearCacheByUrl.bind(http) : null;

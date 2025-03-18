@@ -1,3 +1,59 @@
+/**
+ * 通用工具函数
+ */
+import { nanoid } from 'nanoid';
+
+/**
+ * 检查是否为空值
+ * @param value 待检查的值
+ * @returns 如果值为 null、undefined 或空字符串，则返回 true
+ */
+export const isEmpty = (value: unknown): boolean => {
+  if (value === null || value === undefined) {
+    return true;
+  }
+
+  if (typeof value === 'string' && value.trim() === '') {
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * 判断环境是否为开发环境
+ * @returns true表示当前为开发环境
+ */
+export const isDev = (): boolean => {
+  // 浏览器环境检测
+  if (typeof window !== 'undefined' && window.location) {
+    const host = window.location.hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.');
+  }
+
+  // Node环境检测
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env.NODE_ENV === 'development';
+  }
+
+  // Vite等打包工具的环境变量
+  try {
+    // 使用globalThis.import替代直接访问import.meta
+    // @ts-ignore
+    if (typeof globalThis !== 'undefined' && globalThis.import && globalThis.import.meta?.env?.MODE) {
+      // @ts-ignore
+      return globalThis.import.meta.env.MODE === 'development';
+    }
+  } catch (e) {
+    // 忽略错误
+  }
+
+  return false;
+};
+
+// 导出nanoid函数
+export { nanoid };
+
 export class Funs {
   public static toBase64(file: any): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -8,140 +64,91 @@ export class Funs {
     })
   }
 
+  /**
+   * 获取当前环境
+   * @param key 可选参数，指定要读取的环境变量键名（无需前缀）
+   * @param def 默认值，当环境变量不存在时返回
+   * @returns 环境变量值，如果未指定key则返回NODE_ENV
+   */
+  public static getEnv<T>(key?: string, def?: T): string | T | undefined {
+    // 获取环境变量对象
+    const envObj = (
+      // @ts-ignore 使用globalThis.import替代直接访问import.meta
+      (typeof globalThis !== 'undefined' && globalThis.import && globalThis.import.meta?.env) ||
+      (typeof process !== 'undefined' && process.env) ||
+      {}
+    );
+
+    // 如果没有指定key，则返回NODE_ENV
+    if (!key) {
+      return envObj.NODE_ENV || 'production';
+    }
+
+    // 否则，尝试获取指定的环境变量
+    let detectedValue = def;
+
+    // 检测项目类型并确定前缀
+    if (envObj.VITE_APP_NAME) {
+      // @ts-ignore
+      detectedValue = envObj[`VITE_${key}`] || def;
+    } else if (envObj.REACT_APP_NAME) {
+      // @ts-ignore
+      detectedValue = envObj[`REACT_APP_${key}`] || def;
+    } else if (envObj.VUE_APP_NAME) {
+      // @ts-ignore
+      detectedValue = envObj[`VUE_APP_${key}`] || def;
+    } else {
+      // 没有找到明确的项目类型，尝试常见前缀
+      // @ts-ignore
+      detectedValue = envObj[`VITE_${key}`] ||
+        // @ts-ignore
+        envObj[`REACT_APP_${key}`] ||
+        // @ts-ignore
+        envObj[`VUE_APP_${key}`] ||
+        // @ts-ignore
+        envObj[key] ||
+        def;
+    }
+
+    return detectedValue;
+  }
 
   /**
- * 自动检测当前是否处于开发环境
- * @returns {boolean} true=开发环境，false=生产环境
- */
+   * 判断是否为开发环境
+   * @param env_key 可选的环境变量键名
+   * @returns true表示当前为开发环境
+   */
   public static isDevelopment(env_key?: string) {
     if (env_key) {
-      return Funs.getEnv(env_key, '').toLocaleLowerCase() === 'true';
+      const env = this.getEnv(env_key);
+      return env === 'development' || env === 'dev' || env === true || env === 'true';
     }
 
-    // ================= 优先级1：标准环境变量检测 =================
-    // Node.js / Webpack / Vite 等环境
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV) {
-      return process.env.NODE_ENV === 'development';
+    const nodeEnv = this.getEnv<string>('NODE_ENV');
+    if (nodeEnv) {
+      return nodeEnv === 'development' || nodeEnv === 'dev';
     }
 
-    // ================= 优先级2：Vite 环境检测 =================
-    try {
-      if (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE) {
-        return (import.meta as any).env.MODE === 'development';
-      }
-    } catch (e) {
-      // 忽略 import.meta 不可用的情况
-    }
-
-    // ================= 优先级3：浏览器宿主特征检测 =================
-    if (typeof window !== 'undefined' && window.location) {
-      const { hostname, port } = window.location;
-      // 特征1：本地域名
-      const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(hostname);
-      // 特征2：常见开发端口
-      const isDevPort = ['3000', '5173', '8080', ''].includes(port); // 空端口表示80/443
-      return isLocalhost || isDevPort;
-    }
-
-    // ================= 优先级4：代码压缩特征检测（兜底逻辑） =================
+    // 检测minification
     try {
       // 生产环境代码通常会被压缩，函数名会被缩短
-      const isMinified = /function\s+\w{1,2}\(/.test(Funs.isDevelopment().toString());
+      const isMinified = /function\s+\w{1,2}\(/.test(Funs.isDevelopment.toString());
       return !isMinified;
     } catch (e) {
       return false;
     }
   }
 
-
   /**
-  * 检测项目类型，并自动补全前缀读取环境变量
-  * @param {string} [key] 可选参数，指定要读取的环境变量键名（无需前缀）
-  * @returns {Object} 包含项目类型和键名对应的值
-  */
-  public static getEnv<T>(key: string, def?: T) {
-    let projectType = '未知类型';
-    let detectedValue = def;
-
-    const env = (
-      // 1. 优先检测 Node.js 环境变量
-      (typeof process !== 'undefined' && process?.env) ||
-      // 2. 其次检测 Vite/Webpack 等构建工具注入的环境变量
-      (typeof import.meta !== 'undefined' && (import.meta as any)?.env) ||
-      // 3. 兜底空对象避免 undefined
-      {}
-    );
-
-    // 项目类型特征检测
-    const isUmi = Object.keys(env).some(k => k.startsWith('UMI_APP_') || k === 'UMI_ENV');
-    const isVite = Object.keys(env).some(k => k.startsWith('VITE_APP_') || k.startsWith('VITE_'));
-    const isNode = Object.keys(env).some(k => k.startsWith('NODE_ENV_') || k.startsWith('NODE_'));
-
-    // 确定项目类型
-    if (isUmi) projectType = 'umi';
-    else if (isVite) projectType = 'vite';
-    else if (isNode) projectType = 'node';
-
-    // 处理键名参数
-    if (key) {
-      // 生成候选键名列表（按优先级排序）
-      const candidateKeys = [];
-
-      switch (projectType) {
-        case 'umi':
-          // Umi 可能存在的键名格式：UMI_ENV 或 UMI_APP_[key]
-          candidateKeys.push(`UMI_APP_${key}`, `UMI_${key}`);
-          break;
-        case 'vite':
-          candidateKeys.push(`VITE_APP_${key}`, `VITE_${key}`);
-          break;
-        case 'node':
-          // NODE 可能存在的键名格式：NODE 或 NODE_ENV_[key]
-          candidateKeys.push(`NODE_ENV_${key}`, `NODE_${key}`);
-          break;
-        default:
-          // 未知类型直接尝试原键名
-          candidateKeys.push(key);
-      }
-
-      // 追加原始键名作为兜底
-      candidateKeys.push(key);
-
-      // 遍历查找存在的键
-      for (const candidateKey of candidateKeys) {
-        if (env.hasOwnProperty(candidateKey)) {
-          detectedValue = env[candidateKey];
-          break;
-        }
-      }
-    }
-
-    return detectedValue ?? "";
-
-    // 使用示例
-    // 场景1：在 Umi 项目中读取 API_URL（实际使用 UMI_APP_API_URL）
-    // console.log(detectProjectType('API_URL'));
-
-    // 场景2：在 Vite 项目中读取 MODE（实际使用 VITE_MODE）
-    // console.log(detectProjectType('MODE'));
-
-    // 场景3：读取特殊键 UMI_ENV（自动匹配 UMI_ENV）
-    // console.log(detectProjectType('ENV'));
-
-    // 场景4：未知项目类型
-    // console.log(detectProjectType('VERSION'));
-  }
-
-  /**
-  * 校验 JSON 字符串格式是否合法
-  * @param {string} jsonString 要校验的字符串
-  * @param {boolean} [needParse=false] 是否需要返回解析后的对象
-  * @returns {{
-  *   isValid: boolean,
-  *   error?: string,
-  *   data?: any
-  * }} 校验结果对象
-  */
+   * 校验 JSON 字符串格式是否合法
+   * @param {string} jsonString 要校验的字符串
+   * @param {boolean} [needParse=false] 是否需要返回解析后的对象
+   * @returns {{
+   *   isValid: boolean,
+   *   error?: string,
+   *   data?: any
+   * }} 校验结果对象
+   */
   public static validateJSON(jsonString: string, needParse = false): { isValid: boolean, error?: string, data?: any } {
     // 基础类型校验
     if (typeof jsonString !== 'string') {

@@ -1,5 +1,6 @@
 import dayjs, { Dayjs } from 'dayjs';
-import { createCrypto, Crypto, Funs } from '.';
+import { createCrypto, Crypto } from '.';
+import { isDev } from './funs';
 
 /**
  * 定义一个接口，表示带有数据、可选的过期时间和版本的对象
@@ -12,14 +13,14 @@ interface DataWithExpiration<T> {
 }
 
 /**
- * 从环境变量中获取 APP_STORE_VERSION
+ * 存储版本
  */
-const APP_STORE_VERSION = Funs.getEnv('STORE_VERSION', '');
+const APP_STORE_VERSION = '1.0.0';
 
 /**
- * 从环境变量中获取 APP_STORE_PREFIX
+ * 存储前缀
  */
-const APP_STORE_PREFIX = Funs.getEnv('STORE_PREFIX');
+const APP_STORE_PREFIX = 'app';
 
 export type LocalStorageOptions = {
   /**
@@ -80,7 +81,7 @@ export class LocalStorageWrapper<T> {
     // 将对象转换为 JSON 字符串
     const jsonStr = JSON.stringify(data);
     // 如果不是开发环境且存在加密对象
-    if (!Funs.isDevelopment() && this.crypto) {
+    if (!isDev() && this.crypto) {
       // 对 JSON 字符串进行加密，并在加密完成后将加密后的数据存储到本地存储
       const data = this.crypto.encrypt(jsonStr);
       localStorage.setItem(newKey, data);
@@ -110,7 +111,7 @@ export class LocalStorageWrapper<T> {
         // 初始化数据对象为未定义
         let data: DataWithExpiration<T> | undefined;
         // 如果不是开发环境且存在加密对象
-        if (!Funs.isDevelopment() && this.crypto) {
+        if (!isDev() && this.crypto) {
           // 对获取的值进行解密，并将结果转换为字符串
           const jsonStr = this.crypto.decrypt(ciphertext);
           // 如果解密成功

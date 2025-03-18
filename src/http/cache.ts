@@ -10,9 +10,11 @@ import { getHttpConfig } from './config';
 const CACHE_PREFIX = 'http_cache:';
 
 // 内存缓存，用于优化性能
-const memoryCache = new Map<string, {
+export const memoryCache = new Map<string, {
     data: HttpResponse<any>;
     expireAt: number;
+    url?: string; // 添加URL属性，方便后续按URL清除缓存
+    method?: string; // 添加请求方法，增强缓存控制能力
 }>();
 
 // 一个测试模式的标志，用于测试环境
@@ -54,6 +56,32 @@ export function getCacheKey(config: HttpRequestConfig): string {
     const { url = '', method = 'GET', params, data } = config;
     const key = `${method}:${url}:${JSON.stringify(params)}:${JSON.stringify(data)}`;
     return key;
+}
+
+/**
+ * 从缓存键中提取URL
+ * @param key 缓存键
+ * @returns URL字符串
+ */
+export function getUrlFromCacheKey(key: string): string {
+    const parts = key.split(':');
+    if (parts.length >= 2) {
+        return parts[1]; // 返回URL部分
+    }
+    return '';
+}
+
+/**
+ * 从缓存键中提取请求方法
+ * @param key 缓存键
+ * @returns 请求方法
+ */
+export function getMethodFromCacheKey(key: string): string {
+    const parts = key.split(':');
+    if (parts.length >= 1) {
+        return parts[0]; // 返回请求方法部分
+    }
+    return '';
 }
 
 /**
@@ -171,17 +199,24 @@ async function setEnhancedCache<T>(
             expireAt
         };
 
+        // 从缓存键中提取URL和方法
+        const url = getUrlFromCacheKey(key);
+        const method = getMethodFromCacheKey(key);
+
         // 保存到内存缓存
         memoryCache.set(key, {
             data: cachedResponse,
-            expireAt
+            expireAt,
+            url,
+            method
         });
 
         // 保存到增强存储
         enhancedStorage.put({
             key,
             data: cachedResponse,
-            expirationMillis: expireTime
+            expirationMillis: expireTime,
+            metadata: { url, method } // 添加元数据
         });
     } catch (error) {
         console.error('Enhanced cache set error:', error);
@@ -201,6 +236,10 @@ async function setStandardCache<T>(
         const expireTime = cacheTime || defaultCacheTime || 5 * 60 * 1000; // 默认5分钟
         const expireAt = Date.now() + expireTime;
 
+        // 从缓存键中提取URL和方法
+        const url = getUrlFromCacheKey(key);
+        const method = getMethodFromCacheKey(key);
+
         // 添加过期时间到响应对象
         const cachedResponse = {
             ...data,
@@ -210,12 +249,16 @@ async function setStandardCache<T>(
         // 保存到内存缓存
         memoryCache.set(key, {
             data: cachedResponse,
-            expireAt
+            expireAt,
+            url,
+            method
         });
 
         const cache = {
             data,
-            expireAt
+            expireAt,
+            url, // 添加URL
+            method // 添加方法
         };
         localStorage.setItem(`${CACHE_PREFIX}${key}`, JSON.stringify(cache));
     } catch (error) {
@@ -371,4 +414,278 @@ export function clearExpiredCache(): void {
     return useEnhancedStorage
         ? clearExpiredEnhancedCache()
         : clearExpiredStandardCache();
+}
+
+/**
+ * 通过URL清除缓存 - 增强版实现
+ * @param url 请求URL
+ * @param options 清除选项
+ */
+function clearEnhancedCacheByUrl(url: string, options: {
+    method?: string,
+    exactMatch?: boolean,
+    pattern?: boolean | RegExp
+} = {}): void {
+    try {
+        const { method, exactMatch = false, pattern = false } = options;
+        const keysToDelete: string[] = [];
+
+        // 收集要删除的缓存键
+        memoryCache.forEach((value, key) => {
+            let cacheUrl: string;
+            let cacheMethod: string;
+
+            // 直接从缓存值中获取URL和方法
+            if (value.data && value.data.config) {
+                cacheUrl = value.data.config.url || '';
+                cacheMethod = value.data.config.method || '';
+            } else if (value.url && value.method) {
+                cacheUrl = value.url;
+                cacheMethod = value.method;
+            } else {
+                // 从键中提取URL和方法
+                cacheUrl = getUrlFromCacheKey(key);
+                cacheMethod = getMethodFromCacheKey(key);
+            }
+
+            // 跳过没有URL的项
+            if (!cacheUrl) return;
+
+            // 方法匹配检查
+            const methodMatches = !method || method === cacheMethod;
+            if (!methodMatches) return;
+
+            // URL匹配检查
+            let urlMatches = false;
+
+            if (exactMatch) {
+                // 精确匹配
+                urlMatches = cacheUrl === url;
+            } else if (pattern instanceof RegExp) {
+                // 正则表达式匹配
+                urlMatches = pattern.test(cacheUrl);
+            } else if (pattern === true) {
+                // 包含匹配
+                urlMatches = cacheUrl.includes(url);
+            } else {
+                // 默认前缀匹配
+                urlMatches = cacheUrl.startsWith(url);
+            }
+
+            if (urlMatches) {
+                keysToDelete.push(key);
+            }
+        });
+
+        // 删除匹配的缓存项
+        for (const key of keysToDelete) {
+            memoryCache.delete(key);
+            enhancedStorage.remove(key);
+        }
+    } catch (error) {
+        console.error('Clear enhanced cache by URL error:', error);
+    }
+}
+
+/**
+ * 通过URL清除缓存 - 标准实现
+ * @param url 请求URL
+ * @param options 清除选项
+ */
+function clearStandardCacheByUrl(url: string, options: {
+    method?: string,
+    exactMatch?: boolean,
+    pattern?: boolean | RegExp
+} = {}): void {
+    try {
+        const { method, exactMatch = false, pattern = false } = options;
+        const keysToDelete: string[] = [];
+
+        // 收集要删除的缓存键
+        memoryCache.forEach((value, key) => {
+            let cacheUrl: string;
+            let cacheMethod: string;
+
+            // 直接从缓存值中获取URL和方法
+            if (value.data && value.data.config) {
+                cacheUrl = value.data.config.url || '';
+                cacheMethod = value.data.config.method || '';
+            } else if (value.url && value.method) {
+                cacheUrl = value.url;
+                cacheMethod = value.method;
+            } else {
+                // 从键中提取URL和方法
+                cacheUrl = getUrlFromCacheKey(key);
+                cacheMethod = getMethodFromCacheKey(key);
+            }
+
+            // 跳过没有URL的项
+            if (!cacheUrl) return;
+
+            // 方法匹配检查
+            const methodMatches = !method || method === cacheMethod;
+            if (!methodMatches) return;
+
+            // URL匹配检查
+            let urlMatches = false;
+
+            if (exactMatch) {
+                // 精确匹配
+                urlMatches = cacheUrl === url;
+            } else if (pattern instanceof RegExp) {
+                // 正则表达式匹配
+                urlMatches = pattern.test(cacheUrl);
+            } else if (pattern === true) {
+                // 包含匹配
+                urlMatches = cacheUrl.includes(url);
+            } else {
+                // 默认前缀匹配
+                urlMatches = cacheUrl.startsWith(url);
+            }
+
+            if (urlMatches) {
+                keysToDelete.push(key);
+            }
+        });
+
+        // 删除匹配的缓存项
+        for (const key of keysToDelete) {
+            memoryCache.delete(key);
+        }
+
+        // 处理localStorage缓存
+        if (typeof localStorage !== 'undefined') {
+            const storageKeys = Object.keys(localStorage);
+            for (const storageKey of storageKeys) {
+                if (storageKey.startsWith(CACHE_PREFIX)) {
+                    try {
+                        const cache = localStorage.getItem(storageKey);
+                        if (cache) {
+                            let cacheUrl = '';
+                            let cacheMethod = '';
+
+                            try {
+                                const cacheObj = JSON.parse(cache);
+
+                                if (cacheObj.data && cacheObj.data.config) {
+                                    cacheUrl = cacheObj.data.config.url || '';
+                                    cacheMethod = cacheObj.data.config.method || '';
+                                } else if (cacheObj.url && cacheObj.method) {
+                                    cacheUrl = cacheObj.url;
+                                    cacheMethod = cacheObj.method;
+                                } else {
+                                    // 从键中提取URL和方法
+                                    cacheUrl = getUrlFromCacheKey(storageKey.replace(CACHE_PREFIX, ''));
+                                    cacheMethod = getMethodFromCacheKey(storageKey.replace(CACHE_PREFIX, ''));
+                                }
+
+                                // 跳过没有URL的项
+                                if (!cacheUrl) continue;
+
+                                // 方法匹配检查
+                                const methodMatches = !method || method === cacheMethod;
+                                if (!methodMatches) continue;
+
+                                // URL匹配检查
+                                let urlMatches = false;
+
+                                if (exactMatch) {
+                                    // 精确匹配
+                                    urlMatches = cacheUrl === url;
+                                } else if (pattern instanceof RegExp) {
+                                    // 正则表达式匹配
+                                    urlMatches = pattern.test(cacheUrl);
+                                } else if (pattern === true) {
+                                    // 包含匹配
+                                    urlMatches = cacheUrl.includes(url);
+                                } else {
+                                    // 默认前缀匹配
+                                    urlMatches = cacheUrl.startsWith(url);
+                                }
+
+                                if (urlMatches) {
+                                    localStorage.removeItem(storageKey);
+                                }
+                            } catch (parseError) {
+                                // JSON解析错误，移除可能无效的缓存
+                                localStorage.removeItem(storageKey);
+                            }
+                        }
+                    } catch (error) {
+                        // 无效的缓存项，忽略
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Clear standard cache by URL error:', error);
+    }
+}
+
+/**
+ * 通过URL清除缓存
+ * @param url 请求URL
+ * @param options 清除选项
+ * - method: 请求方法，如 'GET', 'POST' 等，不指定则清除所有方法
+ * - exactMatch: 是否精确匹配URL，默认为false
+ * - pattern: 是否使用模式匹配
+ *   - true: 使用includes匹配 (url包含关系)
+ *   - RegExp: 使用正则表达式匹配
+ *   - false/undefined: 使用前缀匹配 (即url.startsWith)
+ */
+export function clearCacheByUrl(url: string, options: {
+    method?: string,
+    exactMatch?: boolean,
+    pattern?: boolean | RegExp
+} = {}): void {
+    return useEnhancedStorage
+        ? clearEnhancedCacheByUrl(url, options)
+        : clearStandardCacheByUrl(url, options);
+}
+
+/**
+ * 仅用于测试的简化缓存清除方法
+ * 注意：这个方法只在测试中使用，生产中请使用正常的clearCacheByUrl方法
+ */
+export function __testOnlyClearCacheByUrl(url: string, options: {
+    method?: string,
+    exactMatch?: boolean,
+    pattern?: boolean | RegExp
+} = {}): void {
+    const { method, exactMatch = false, pattern = false } = options;
+
+    // 遍历内存缓存并删除匹配的项
+    const keysToDelete: string[] = [];
+
+    memoryCache.forEach((value, key) => {
+        // 获取URL和方法
+        const cacheUrl = value.url || '';
+        const cacheMethod = value.method || getMethodFromCacheKey(key);
+
+        // 方法匹配检查
+        if (method && cacheMethod !== method) {
+            return;
+        }
+
+        // URL匹配检查
+        let urlMatches = false;
+        if (exactMatch) {
+            urlMatches = cacheUrl === url;
+        } else if (pattern instanceof RegExp) {
+            urlMatches = pattern.test(cacheUrl);
+        } else if (pattern === true) {
+            urlMatches = cacheUrl.includes(url);
+        } else {
+            urlMatches = cacheUrl.startsWith(url);
+        }
+
+        if (urlMatches) {
+            keysToDelete.push(key);
+        }
+    });
+
+    // 删除匹配的项
+    for (const key of keysToDelete) {
+        memoryCache.delete(key);
+    }
 }

@@ -1,5 +1,4 @@
 export * from './crypto';
-export * from './nanoid';
 export * from './storage';
 export * from './validate';
 export * from './funs';

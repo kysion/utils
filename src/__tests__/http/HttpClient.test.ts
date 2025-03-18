@@ -1,5 +1,5 @@
 import axios from 'axios';
-import HttpClient from '../../http/HttpClient';
+import { HttpClient } from '../../http/HttpClient';
 import { configureHttp, resetHttpConfig } from '../../http/config';
 
 // Jest模拟类型

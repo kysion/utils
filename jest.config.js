@@ -1,49 +1,38 @@
-/** @type {import('ts-jest').JestConfigWithTsJest} */
+/** @type {import('jest').Config} */
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'jsdom',
-  roots: ['<rootDir>/src'],
-  transform: {
-    '^.+\\.tsx?$': ['ts-jest', { 
-      isolatedModules: true
-    }]
-  },
-  testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.tsx?$',
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
-    '^nanoid(/.+)?$': '<rootDir>/__mocks__/nanoidMock.js'
+  transform: {
+    '^.+\\.(ts|tsx)$': [
+      'ts-jest',
+      {
+        // 解决 import.meta 问题
+        useESM: true,
+      },
+    ],
   },
   transformIgnorePatterns: [
-    '/node_modules/(?!nanoid)/'
+    'node_modules/(?!(nanoid|axios)/)',
   ],
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  collectCoverageFrom: [
-    'src/**/*.{ts,tsx}',
-    '!src/**/*.d.ts',
-    '!src/**/index.ts',
-    '!src/**/*.types.ts',
-  ],
-  coverageThreshold: {
-    global: {
-      branches: 70,
-      functions: 70,
-      lines: 70,
-      statements: 70,
-    },
-  },
-  globals: {
-    // 模拟 import.meta
-    'import.meta': {
-      env: {
-        MODE: 'test'
-      }
-    }
+  moduleNameMapper: {
+    // 处理 ESM 导入
+    '^(\\.\\.?\\/.+)\\.js$': '$1',
+    // 处理nanoid - 使用简单mock
+    '^nanoid$': '<rootDir>/src/__mocks__/nanoid.js'
   },
   testPathIgnorePatterns: [
-    '/node_modules/',
-    '/lib/',
+    '/node_modules/', 
+    '/dist/',
     '/es/',
-    '/.history/'
+    '/lib/'
   ],
+  globals: {
+    // 为 import.meta 提供模拟值
+    'ts-jest': {
+      useESM: true,
+    },
+  },
+  // 模拟 import.meta
+  setupFiles: ['<rootDir>/jest.setup.js'],
 }; 

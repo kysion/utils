@@ -3,7 +3,7 @@
  * 基于Axios封装，提供请求拦截、响应拦截、错误处理、请求取消、缓存等功能
  */
 
-import axios, { AxiosInstance, CancelTokenSource, AxiosError } from 'axios';
+import axios, { AxiosInstance, CancelTokenSource, AxiosError, AxiosProgressEvent, AxiosRequestHeaders, AxiosResponse } from 'axios';
 import type {
     HttpRequestConfig,
     HttpResponse,
@@ -11,17 +11,23 @@ import type {
     ResponseInterceptor,
     ErrorInterceptor,
     ApiResponse,
-    HttpGlobalConfig
+    HttpGlobalConfig,
+    UploadProgressInfo,
+    DownloadProgressInfo,
+    ResumeInfo
 } from './types';
 import { setupDefaultInterceptors } from './interceptors';
-import { getCacheKey, getCache, setCache } from './cache';
+import { getCacheKey, getCache, setCache, clearCacheByUrl } from './cache';
 import { Funs } from '..';
 import { getHttpConfig } from './config';
 
 /**
  * HTTP客户端类
  */
-class HttpClient {
+export class HttpClient {
+    // 单例实例
+    public static instance: HttpClient | null = null;
+    private config: HttpRequestConfig;
     // Axios实例
     private axiosInstance: AxiosInstance;
     // 请求拦截器列表
@@ -34,6 +40,63 @@ class HttpClient {
     private cancelTokenMap: Map<string, CancelTokenSource> = new Map();
 
     /**
+     * 获取HttpClient单例实例
+     * @param config 配置（可选）
+     * @returns HttpClient实例
+     */
+    public static getInstance(config?: HttpRequestConfig): HttpClient {
+        if (!HttpClient.instance) {
+            HttpClient.instance = new HttpClient(config);
+        }
+        return HttpClient.instance;
+    }
+
+    /**
+     * 更新默认单例实例的配置
+     * @param config 新的配置
+     * @returns 更新后的HttpClient实例
+     */
+    public static updateConfig(config: Partial<HttpRequestConfig>): HttpClient {
+        if (!HttpClient.instance) {
+            HttpClient.instance = new HttpClient(config);
+        } else {
+            HttpClient.instance.updateConfig(config);
+        }
+        return HttpClient.instance;
+    }
+
+    /**
+     * 更新当前实例的配置
+     * @param config 新的配置
+     */
+    public updateConfig(config: Partial<HttpRequestConfig>): void {
+        // 更新配置
+        this.config = { ...this.config, ...config };
+
+        // 应用新配置到axios实例
+        if (config.baseURL !== undefined) {
+            this.axiosInstance.defaults.baseURL = config.baseURL;
+        }
+        if (config.timeout !== undefined) {
+            this.axiosInstance.defaults.timeout = config.timeout;
+        }
+        if (config.headers) {
+            this.axiosInstance.defaults.headers = {
+                ...this.axiosInstance.defaults.headers,
+                ...config.headers
+            };
+        }
+
+        // 更新其他可能的配置项
+        if (config.withCredentials !== undefined) {
+            this.axiosInstance.defaults.withCredentials = config.withCredentials;
+        }
+        if (config.responseType !== undefined) {
+            this.axiosInstance.defaults.responseType = config.responseType;
+        }
+    }
+
+    /**
      * 构造函数
      * @param config 实例配置
      */
@@ -41,16 +104,19 @@ class HttpClient {
         // 获取全局配置
         const globalConfig = getHttpConfig();
 
-        // 创建Axios实例
-        this.axiosInstance = axios.create({
+        // 保存配置
+        this.config = {
             baseURL: globalConfig.baseURL || Funs.getEnv('APP_SERVICE_BASE_URL', ''),
             timeout: globalConfig.timeout || 30000,
             headers: {
                 'Content-Type': 'application/json',
                 ...globalConfig.headers
-            },
+            } as any,
             ...config,
-        });
+        };
+
+        // 创建Axios实例
+        this.axiosInstance = axios.create(this.config);
 
         // 设置默认拦截器
         setupDefaultInterceptors(this);
@@ -278,7 +344,7 @@ class HttpClient {
             }
 
             // 默认情况下返回API数据部分，只有在明确要求时才返回完整响应
-            if (config.returnResponse === true || !this.isApiResponse(response.data)) {
+            if (config.returnResponse === true || !response || !response.data || !this.isApiResponse(response.data)) {
                 return response;
             }
 
@@ -437,7 +503,661 @@ class HttpClient {
 
         return apiResponse.data;
     }
-}
 
-// 导出默认导出
-export default HttpClient;
+    /**
+     * 根据URL清除缓存
+     * @param url 请求URL
+     * @param options 清除选项
+     * - method: 请求方法，如 'GET', 'POST' 等，不指定则清除所有方法
+     * - exactMatch: 是否精确匹配URL，默认为false
+     * - pattern: 是否使用模式匹配
+     */
+    public clearCacheByUrl(url: string, options?: {
+        method?: string;
+        exactMatch?: boolean;
+        pattern?: boolean | RegExp;
+    }): void {
+        clearCacheByUrl(url, options);
+    }
+
+    /**
+     * 创建增强版的进度回调处理函数
+     * @param progressCallback 原始的进度回调
+     * @param infoCallback 增强的进度信息回调
+     * @param calculateSpeed 是否计算速度
+     * @returns 处理函数
+     */
+    private createProgressHandler(
+        progressCallback?: (progressEvent: AxiosProgressEvent) => void,
+        infoCallback?: (progressInfo: UploadProgressInfo | DownloadProgressInfo) => void,
+        calculateSpeed = false
+    ): (progressEvent: AxiosProgressEvent) => void {
+        let startTime = Date.now();
+        let lastLoaded = 0;
+        let speedSamples: number[] = [];
+
+        return (progressEvent: AxiosProgressEvent) => {
+            // 调用原始回调
+            if (progressCallback) {
+                progressCallback(progressEvent);
+            }
+
+            // 如果没有增强回调，直接返回
+            if (!infoCallback) {
+                return;
+            }
+
+            const { loaded, total } = progressEvent;
+            const percent = total ? Math.floor((loaded / total) * 100) : 0;
+
+            // 计算速度
+            let speed: number | undefined;
+            let remainingTime: number | undefined;
+
+            if (calculateSpeed) {
+                const currentTime = Date.now();
+                const timeDiff = (currentTime - startTime) / 1000; // 转换为秒
+
+                if (timeDiff > 0) {
+                    const loadedDiff = loaded - lastLoaded;
+                    const currentSpeed = loadedDiff / timeDiff; // bytes/s
+
+                    // 添加样本并保持最多10个
+                    speedSamples.push(currentSpeed);
+                    if (speedSamples.length > 10) {
+                        speedSamples.shift();
+                    }
+
+                    // 计算平均速度
+                    speed = speedSamples.reduce((a, b) => a + b, 0) / speedSamples.length;
+
+                    // 计算剩余时间
+                    if (speed > 0 && total) {
+                        remainingTime = (total - loaded) / speed;
+                    }
+
+                    // 重置计时
+                    startTime = currentTime;
+                    lastLoaded = loaded;
+                }
+            }
+
+            // 创建进度信息对象
+            const progressInfo: UploadProgressInfo | DownloadProgressInfo = {
+                ...progressEvent,
+                percent,
+                speed,
+                remainingTime
+            };
+
+            // 调用增强回调
+            infoCallback(progressInfo);
+        };
+    }
+
+    /**
+     * 上传文件
+     * @param url 上传地址
+     * @param file 要上传的文件
+     * @param config 配置选项
+     * @returns 上传结果
+     */
+    public async upload<T = any>(
+        url: string,
+        file: File | Blob | Buffer,
+        config?: HttpRequestConfig
+    ): Promise<HttpResponse<T> | T> {
+        // 合并配置
+        const mergedConfig: HttpRequestConfig = {
+            ...this.config,
+            ...config,
+        };
+
+        // 合并头信息
+        mergedConfig.headers = {
+            ...(this.config.headers || {}),
+            ...(config?.headers || {}),
+            'Content-Type': 'multipart/form-data',
+        } as AxiosRequestHeaders;
+
+        // 创建表单数据
+        const formData = new FormData();
+
+        // 如果是Buffer，创建Blob对象
+        let fileToUpload: File | Blob;
+        if (Buffer.isBuffer(file)) {
+            fileToUpload = new Blob([file]);
+        } else {
+            fileToUpload = file;
+        }
+
+        // 文件名处理
+        const fileName = (file as File).name || config?.fileName || 'file';
+        formData.append('file', fileToUpload, fileName);
+
+        // 添加其他表单字段
+        if (config && config.data) {
+            const data = config.data;
+            Object.keys(data).forEach((key) => {
+                formData.append(key, data[key]);
+            });
+        }
+
+        // 处理进度回调
+        if (mergedConfig.onUploadProgress || mergedConfig.onUploadProgressInfo) {
+            mergedConfig.onUploadProgress = this.createProgressHandler(
+                mergedConfig.onUploadProgress,
+                mergedConfig.onUploadProgressInfo,
+                mergedConfig.calculateSpeed
+            );
+        }
+
+        // 发起上传请求
+        return this.post<T>(url, formData, mergedConfig);
+    }
+
+    /**
+     * 上传大文件（分块上传）
+     * @param url 上传地址
+     * @param file 要上传的文件
+     * @param config 配置选项
+     * @returns 上传结果
+     */
+    public async uploadLargeFile<T = any>(
+        url: string,
+        file: File | Blob,
+        config?: HttpRequestConfig
+    ): Promise<HttpResponse<T> | T> {
+        // 获取全局配置
+        const globalConfig = getHttpConfig();
+
+        // 合并配置
+        const mergedConfig: HttpRequestConfig = {
+            ...this.config,
+            ...config,
+        };
+
+        // 合并头信息
+        mergedConfig.headers = {
+            ...(this.config.headers || {}),
+            ...(config?.headers || {}),
+            'Content-Type': 'application/octet-stream',
+        } as AxiosRequestHeaders;
+
+        // 块大小和并发数
+        const chunkSize = mergedConfig.chunkSize || globalConfig.defaultChunkSize || 1024 * 1024; // 默认1MB
+        const concurrency = mergedConfig.concurrency || globalConfig.defaultUploadConcurrency || 3;
+
+        // 断点续传信息
+        const resumeInfo = mergedConfig.resumeInfo;
+        const startByte = resumeInfo?.startByte || 0;
+        const totalSize = file.size;
+
+        // 创建进度追踪对象
+        let uploadedBytes = startByte;
+        let lastReportTime = Date.now();
+        let speedSamples: number[] = [];
+
+        // 创建分块
+        const chunks: Array<{ start: number, end: number }> = [];
+        for (let start = startByte; start < totalSize; start += chunkSize) {
+            const end = Math.min(start + chunkSize, totalSize);
+            chunks.push({ start, end });
+        }
+
+        // 进度回调函数
+        const updateProgress = () => {
+            if (!mergedConfig.onUploadProgressInfo) return;
+
+            const loaded = uploadedBytes;
+            const total = totalSize;
+            const percent = Math.floor((loaded / total) * 100);
+
+            // 计算速度
+            let speed: number | undefined;
+            let remainingTime: number | undefined;
+
+            if (mergedConfig.calculateSpeed) {
+                const currentTime = Date.now();
+                const timeDiff = (currentTime - lastReportTime) / 1000; // 转换为秒
+
+                if (timeDiff > 0.5) { // 至少0.5秒更新一次
+                    // 计算平均速度
+                    if (speedSamples.length > 0) {
+                        speed = speedSamples.reduce((a, b) => a + b, 0) / speedSamples.length;
+                    }
+
+                    // 重置
+                    speedSamples = [];
+                    lastReportTime = currentTime;
+
+                    // 计算剩余时间
+                    if (speed && speed > 0) {
+                        remainingTime = (total - loaded) / speed;
+                    }
+                }
+            }
+
+            const progressInfo: UploadProgressInfo = {
+                loaded,
+                total,
+                percent,
+                speed,
+                remainingTime,
+                bytes: loaded,
+                estimated: total,
+                lengthComputable: true
+            };
+
+            mergedConfig.onUploadProgressInfo(progressInfo);
+        };
+
+        // 上传单个分块
+        const uploadChunk = async (chunk: { start: number, end: number }) => {
+            const { start, end } = chunk;
+            const chunkData = file.slice(start, end);
+
+            // 设置范围头
+            const chunkHeaders = {
+                ...(mergedConfig.headers || {}),
+                'Content-Range': `bytes ${start}-${end - 1}/${totalSize}`,
+                'Content-Length': `${end - start}`
+            } as unknown as AxiosRequestHeaders;
+
+            try {
+                // 发送分块
+                const response = await this.axiosInstance.post(url, chunkData, {
+                    ...mergedConfig,
+                    headers: chunkHeaders,
+                    onUploadProgress: (progressEvent) => {
+                        // 更新已上传字节数
+                        const chunkUploaded = Math.min(progressEvent.loaded, end - start);
+                        uploadedBytes = start + chunkUploaded;
+
+                        // 计算速度
+                        if (mergedConfig.calculateSpeed) {
+                            const currentTime = Date.now();
+                            const timeDiff = (currentTime - lastReportTime) / 1000; // 转换为秒
+                            if (timeDiff > 0) {
+                                const currentSpeed = progressEvent.loaded / timeDiff;
+                                speedSamples.push(currentSpeed);
+                            }
+                        }
+
+                        updateProgress();
+                    }
+                });
+
+                return response;
+            } catch (error: any) {  // 显式指定类型为any
+                // 如果支持断点续传，保存当前进度
+                if (mergedConfig.resumable) {
+                    const newResumeInfo: ResumeInfo = {
+                        startByte: uploadedBytes,
+                        totalBytes: totalSize,
+                        fileId: (file as File).name || 'unknown'
+                    };
+
+                    // 可以在这里保存断点续传信息，例如存储到localStorage
+                    console.error('上传中断，断点续传信息:', newResumeInfo);
+                }
+
+                throw error;
+            }
+        };
+
+        // 并发上传分块
+        const uploadChunks = async () => {
+            let results: AxiosResponse<any>[] = [];
+            let currentIndex = 0;
+
+            // 并发处理函数
+            const processQueue = async () => {
+                while (currentIndex < chunks.length) {
+                    const chunkIndex = currentIndex++;
+                    results[chunkIndex] = await uploadChunk(chunks[chunkIndex]);
+                }
+            };
+
+            // 创建并发任务
+            const tasks = [];
+            for (let i = 0; i < Math.min(concurrency, chunks.length); i++) {
+                tasks.push(processQueue());
+            }
+
+            // 等待所有任务完成
+            await Promise.all(tasks);
+
+            // 返回最后一个响应
+            return results[results.length - 1];
+        };
+
+        // 开始上传
+        const response = await uploadChunks();
+
+        // 处理返回结果
+        if (mergedConfig.returnResponse) {
+            return response as HttpResponse<T>;
+        } else {
+            return this.extractApiData(response as HttpResponse<ApiResponse<T>>);
+        }
+    }
+
+    /**
+     * 下载文件
+     * @param url 下载地址
+     * @param config 配置选项
+     * @returns 下载结果（Blob 或 Buffer）
+     */
+    public async download(
+        url: string,
+        config?: HttpRequestConfig
+    ): Promise<Blob | Buffer> {
+        // 合并配置
+        const mergedConfig: HttpRequestConfig = {
+            ...this.config,
+            ...config,
+            responseType: 'blob',
+        };
+
+        // 合并头信息
+        mergedConfig.headers = {
+            ...(this.config.headers || {}),
+            ...(config?.headers || {})
+        } as AxiosRequestHeaders;
+
+        // 处理进度回调
+        if (mergedConfig.onDownloadProgress || mergedConfig.onDownloadProgressInfo) {
+            mergedConfig.onDownloadProgress = this.createProgressHandler(
+                mergedConfig.onDownloadProgress,
+                mergedConfig.onDownloadProgressInfo,
+                mergedConfig.calculateSpeed
+            );
+        }
+
+        try {
+            // 断点续传
+            if (mergedConfig.resumable && mergedConfig.resumeInfo) {
+                const { startByte } = mergedConfig.resumeInfo;
+                if (startByte > 0) {
+                    const rangeHeaders = {
+                        ...(mergedConfig.headers || {}),
+                        Range: `bytes=${startByte}-`
+                    } as unknown as AxiosRequestHeaders;
+
+                    mergedConfig.headers = rangeHeaders;
+                }
+            }
+
+            // 发起下载请求
+            const response = await this.axiosInstance.get(url, mergedConfig);
+            const data = response.data;
+
+            // 浏览器环境（处理文件保存）
+            if (typeof window !== 'undefined' && config?.fileName) {
+                this.saveFile(data, config.fileName);
+            }
+
+            return data;
+        } catch (error: any) {  // 显式指定类型为any
+            // 处理断点续传
+            if (mergedConfig.resumable && error.response && error.response.status === 416) {
+                // 范围请求错误，可能是服务器不支持或范围无效
+                console.warn('服务器不支持范围请求或范围无效，将从头开始下载');
+
+                // 移除范围头并重试
+                const newConfig = { ...mergedConfig };
+                if (newConfig.headers && 'Range' in newConfig.headers) {
+                    delete (newConfig.headers as any).Range;
+                }
+                if (newConfig.resumeInfo) {
+                    newConfig.resumeInfo.startByte = 0;
+                }
+
+                return this.download(url, newConfig);
+            }
+
+            throw error;
+        }
+    }
+
+    /**
+     * 大文件下载（支持断点续传）
+     * @param url 下载地址
+     * @param config 配置选项
+     * @returns 下载的文件（Blob 或 Buffer）
+     */
+    public async downloadLargeFile(
+        url: string,
+        config?: HttpRequestConfig
+    ): Promise<Blob | Buffer> {
+        // 获取全局配置
+        const globalConfig = getHttpConfig();
+
+        // 合并配置
+        const mergedConfig: HttpRequestConfig = {
+            ...this.config,
+            ...config,
+            responseType: 'arraybuffer',
+            headers: {
+                ...(this.config.headers || {}),
+                ...(config?.headers || {}),
+            } as unknown as AxiosRequestHeaders
+        };
+
+        // 获取文件大小
+        const headResponse = await this.axiosInstance.head(url, {
+            ...mergedConfig,
+            responseType: 'stream'
+        });
+
+        const contentLength = parseInt(headResponse.headers['content-length'] || '0', 10);
+        if (!contentLength) {
+            throw new Error('无法获取文件大小');
+        }
+
+        // 块大小和并发数
+        const chunkSize = mergedConfig.chunkSize || globalConfig.defaultChunkSize || 1024 * 1024; // 默认1MB
+        const concurrency = mergedConfig.concurrency || globalConfig.defaultDownloadConcurrency || 3;
+
+        // 断点续传信息
+        const resumeInfo = mergedConfig.resumeInfo;
+        const startByte = resumeInfo?.startByte || 0;
+
+        // 创建分块
+        const chunks: Array<{ start: number, end: number, data?: ArrayBuffer }> = [];
+        for (let start = startByte; start < contentLength; start += chunkSize) {
+            const end = Math.min(start + chunkSize, contentLength) - 1;
+            chunks.push({ start, end });
+        }
+
+        // 进度跟踪
+        let downloadedBytes = startByte;
+        let lastReportTime = Date.now();
+        let speedSamples: number[] = [];
+
+        // 进度回调函数
+        const updateProgress = () => {
+            if (!mergedConfig.onDownloadProgressInfo) return;
+
+            const loaded = downloadedBytes;
+            const total = contentLength;
+            const percent = Math.floor((loaded / total) * 100);
+
+            // 计算速度
+            let speed: number | undefined;
+            let remainingTime: number | undefined;
+
+            if (mergedConfig.calculateSpeed) {
+                const currentTime = Date.now();
+                const timeDiff = (currentTime - lastReportTime) / 1000; // 转换为秒
+
+                if (timeDiff > 0.5) { // 至少0.5秒更新一次
+                    // 计算平均速度
+                    if (speedSamples.length > 0) {
+                        speed = speedSamples.reduce((a, b) => a + b, 0) / speedSamples.length;
+                    }
+
+                    // 重置
+                    speedSamples = [];
+                    lastReportTime = currentTime;
+
+                    // 计算剩余时间
+                    if (speed && speed > 0) {
+                        remainingTime = (total - loaded) / speed;
+                    }
+                }
+            }
+
+            const progressInfo: DownloadProgressInfo = {
+                loaded,
+                total,
+                percent,
+                speed,
+                remainingTime,
+                bytes: loaded,
+                estimated: total,
+                lengthComputable: true
+            };
+
+            mergedConfig.onDownloadProgressInfo(progressInfo);
+        };
+
+        // 下载单个分块
+        const downloadChunk = async (chunk: { start: number, end: number, data?: ArrayBuffer }) => {
+            const { start, end } = chunk;
+
+            // 设置范围头
+            const headers = {
+                ...mergedConfig.headers,
+                Range: `bytes=${start}-${end}`
+            } as unknown as AxiosRequestHeaders;
+
+            try {
+                // 发送请求
+                const response = await this.axiosInstance.get(url, {
+                    ...mergedConfig,
+                    headers,
+                    onDownloadProgress: (progressEvent) => {
+                        // 更新已下载字节数
+                        const chunkDownloaded = Math.min(progressEvent.loaded, end - start + 1);
+                        downloadedBytes = start + chunkDownloaded;
+
+                        // 计算速度
+                        if (mergedConfig.calculateSpeed) {
+                            const currentTime = Date.now();
+                            const timeDiff = (currentTime - lastReportTime) / 1000; // 转换为秒
+                            if (timeDiff > 0) {
+                                const currentSpeed = progressEvent.loaded / timeDiff;
+                                speedSamples.push(currentSpeed);
+                            }
+                        }
+
+                        updateProgress();
+                    }
+                });
+
+                // 保存数据
+                chunk.data = response.data;
+                return chunk;
+            } catch (error) {
+                // 如果支持断点续传，保存当前进度
+                if (mergedConfig.resumable) {
+                    const newResumeInfo: ResumeInfo = {
+                        startByte: downloadedBytes,
+                        totalBytes: contentLength,
+                        fileId: config?.fileName || url.split('/').pop() || 'unknown'
+                    };
+
+                    // 可以在这里保存断点续传信息，例如存储到localStorage
+                    console.error('下载中断，断点续传信息:', newResumeInfo);
+                }
+
+                throw error;
+            }
+        };
+
+        // 并发下载分块
+        const downloadChunks = async () => {
+            let results: Array<{ start: number, end: number, data?: ArrayBuffer }> = [];
+            let currentIndex = 0;
+
+            // 并发处理函数
+            const processQueue = async () => {
+                while (currentIndex < chunks.length) {
+                    const chunkIndex = currentIndex++;
+                    results[chunkIndex] = await downloadChunk(chunks[chunkIndex]);
+                }
+            };
+
+            // 创建并发任务
+            const tasks = [];
+            for (let i = 0; i < Math.min(concurrency, chunks.length); i++) {
+                tasks.push(processQueue());
+            }
+
+            // 等待所有任务完成
+            await Promise.all(tasks);
+
+            return results;
+        };
+
+        // 开始下载
+        const downloadedChunks = await downloadChunks();
+
+        // 合并分块
+        const totalSize = contentLength - startByte;
+        const result = new Uint8Array(totalSize);
+        let offset = 0;
+
+        downloadedChunks.forEach(chunk => {
+            if (chunk.data) {
+                const data = new Uint8Array(chunk.data);
+                result.set(data, offset);
+                offset += data.length;
+            }
+        });
+
+        // 创建Blob或Buffer
+        if (typeof window !== 'undefined') {
+            const blob = new Blob([result]);
+
+            // 如果需要保存文件
+            if (config?.fileName) {
+                this.saveFile(blob, config.fileName);
+            }
+
+            return blob;
+        } else {
+            // Node.js环境
+            return Buffer.from(result);
+        }
+    }
+
+    /**
+     * 保存文件到客户端（仅浏览器环境）
+     * @param blob 文件blob
+     * @param fileName 文件名
+     */
+    private saveFile(blob: Blob, fileName: string): void {
+        // 仅在浏览器环境中执行
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        // 创建下载链接
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.style.display = 'none';
+
+        // 触发下载
+        document.body.appendChild(a);
+        a.click();
+
+        // 清理
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+}
