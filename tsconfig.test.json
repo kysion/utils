@@ -1,0 +1,14 @@
+{
+  // 测试环境的TypeScript配置
+  // 禁用严格模式以便运行测试时不受类型约束
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "types": ["jest", "node"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "lib", "es"]
+} 
