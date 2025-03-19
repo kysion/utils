@@ -112,7 +112,7 @@ export class HttpClient {
 
         // 保存配置
         this.config = {
-            baseURL: globalConfig.baseURL || Funs.getEnv('APP_SERVICE_BASE_URL', ''),
+            baseURL: globalConfig.baseURL || Funs.getEnv('SERVICE_BASE_URL', ''),
             timeout: globalConfig.timeout || 30000,
             headers: {
                 'Content-Type': 'application/json',

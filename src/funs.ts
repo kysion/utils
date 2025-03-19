@@ -1,9 +1,4 @@
 /**
- * 通用工具函数
- */
-import { nanoid } from 'nanoid';
-
-/**
  * 检查是否为空值
  * @param value 待检查的值
  * @returns 如果值为 null、undefined 或空字符串，则返回 true
@@ -38,11 +33,11 @@ export const isDev = (): boolean => {
 
   // Vite等打包工具的环境变量
   try {
-    // 使用globalThis.import替代直接访问import.meta
-    // @ts-ignore
-    if (typeof globalThis !== 'undefined' && globalThis.import && globalThis.import.meta?.env?.MODE) {
+    // 首先尝试访问import.meta
+    // @ts-ignore TypeScript不识别扩展的import.meta属性
+    if (typeof import.meta !== 'undefined' && import.meta?.env?.MODE) {
       // @ts-ignore
-      return globalThis.import.meta.env.MODE === 'development';
+      return import.meta.env.MODE === 'development';
     }
   } catch (e) {
     // 忽略错误
@@ -50,9 +45,6 @@ export const isDev = (): boolean => {
 
   return false;
 };
-
-// 导出nanoid函数
-export { nanoid };
 
 export class Funs {
   public static toBase64(file: any): Promise<string> {
@@ -70,50 +62,67 @@ export class Funs {
    * @param def 默认值，当环境变量不存在时返回
    * @returns 环境变量值，如果未指定key则返回NODE_ENV
    */
-  public static getEnv<T>(key?: string, def: T = undefined as any, callback?: (v: any) => T): T {
-    // 获取环境变量对象
-    const envObj = (
-      (typeof globalThis !== 'undefined' && (import.meta as any) && (import.meta as any).env) ||
-      (typeof process !== 'undefined' && process.env) ||
-      {}
-    );
-
-    // 如果没有指定key，则返回NODE_ENV
-    if (!key) {
-      return envObj.NODE_ENV || 'production';
+  public static getEnv<T>(key?: string, def: T = undefined as any, callback: (v: any) => T = undefined as any): T {
+    // 确定当前环境变量对象
+    let env;
+    try {
+      if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+        env = (import.meta as any).env;
+      } else if (typeof process !== 'undefined' && process.env) {
+        env = process.env;
+      } else {
+        env = {};
+      }
+    } catch (e) {
+      // 在Jest环境下，直接使用process.env
+      env = typeof process !== 'undefined' && process.env ? process.env : {};
     }
 
-    // 否则，尝试获取指定的环境变量
-    let detectedValue = def;
-
-    // 检测项目类型并确定前缀
-    if (envObj.VITE_APP_NAME) {
-      // @ts-ignore
-      detectedValue = envObj[`VITE_${key}`] || def;
-    } else if (envObj.REACT_APP_NAME) {
-      // @ts-ignore
-      detectedValue = envObj[`REACT_APP_${key}`] || def;
-    } else if (envObj.VUE_APP_NAME) {
-      // @ts-ignore
-      detectedValue = envObj[`VUE_APP_${key}`] || def;
-    } else {
-      // 没有找到明确的项目类型，尝试常见前缀
-      // @ts-ignore
-      detectedValue = envObj[`VITE_${key}`] ||
-        // @ts-ignore
-        envObj[`REACT_APP_${key}`] ||
-        // @ts-ignore
-        envObj[`VUE_APP_${key}`] ||
-        // @ts-ignore
-        envObj[key] ||
-        def;
+    // 处理未提供 key 的情况
+    if (key === undefined) {
+      const nodeEnv = env.NODE_ENV || def || 'production';
+      return typeof callback === 'function' ? callback(nodeEnv) : nodeEnv;
     }
 
-    if (callback) {
-      detectedValue = callback(detectedValue);
+    // 准备参数
+    const keyString = String(key);
+    let possibleKeys = [];
+
+    // 生成可能的键名组合
+    possibleKeys = [
+      `REACT_APP_${keyString}`,
+      `VITE_APP_${keyString}`,
+      `VUE_APP_${keyString}`,
+      `REACT_${keyString}`,
+      `VITE_${keyString}`,
+      `VUE_${keyString}`,
+      keyString // 原始 key
+    ];
+
+    // 查找存在的环境变量
+    let value;
+    for (const envKey of possibleKeys) {
+      if (env[envKey] !== undefined) {
+        value = env[envKey];
+        break;
+      }
     }
 
-    return detectedValue;
+    // 处理未找到的情况
+    if (value === undefined) {
+      value = def;
+    }
+
+    // 执行回调处理
+    if (typeof callback === 'function') {
+      try {
+        value = callback(value);
+      } catch (e) {
+        console.error('Callback function error:', e);
+      }
+    }
+
+    return value;
   }
 
   /**

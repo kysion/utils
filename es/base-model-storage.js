@@ -10,6 +10,7 @@ import { LocalStorageWrapper } from './storage';
  * @template T 模型类型
  */
 export class ModelWithStorage extends BaseModel {
+    storage;
     /**
      * 构造函数
      * @param storeKey 存储键名

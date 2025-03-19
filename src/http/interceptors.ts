@@ -8,6 +8,7 @@ import type { HttpRequestConfig, HttpResponse } from './types';
 import { Funs } from '../funs';
 import { getErrorMessage, getAuthToken, getCurrentLanguage, handleAuthFailed, getHttpConfig } from './config';
 
+
 // 请求拦截器
 export function requestInterceptor(config: HttpRequestConfig) {
     const { debug } = getHttpConfig();
@@ -28,13 +29,8 @@ export function requestInterceptor(config: HttpRequestConfig) {
     if (!config.headers) {
         config.headers = {} as AxiosHeaders;
     }
-    config.headers['Accept-Language'] = language;
 
-    // 添加客户端标识
-    const clientToken = localStorage.getItem('clientToken');
-    if (clientToken && config.headers) {
-        config.headers['X-CLIENT-ID'] = clientToken;
-    }
+    config.headers['Accept-Language'] = language;
 
     // 调试信息
     if (debug && Funs.isDevelopment()) {

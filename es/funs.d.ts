@@ -1,8 +1,4 @@
 /**
- * 通用工具函数
- */
-import { nanoid } from 'nanoid';
-/**
  * 检查是否为空值
  * @param value 待检查的值
  * @returns 如果值为 null、undefined 或空字符串，则返回 true
@@ -13,7 +9,6 @@ export declare const isEmpty: (value: unknown) => boolean;
  * @returns true表示当前为开发环境
  */
 export declare const isDev: () => boolean;
-export { nanoid };
 export declare class Funs {
     static toBase64(file: any): Promise<string>;
     /**

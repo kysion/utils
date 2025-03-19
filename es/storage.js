@@ -14,6 +14,10 @@ const APP_STORE_PREFIX = 'app';
  * @template T 存储数据的类型
  */
 export class LocalStorageWrapper {
+    crypto; // 用于加密的对象
+    storageKey; // 默认的存储键
+    keyPrefix; // 键的前缀
+    version; // 数据的版本
     /**
      * 构造函数，初始化类的属性
      * @param params 包含键前缀、可选的加密对象、默认键和版本的参数对象

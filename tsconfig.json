@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "es2020",
-    "module": "es2020",
+    "target": "ES2022",
+    "module": "ES2022",
     "declaration": true,
     "outDir": "lib",
     "strict": true,
@@ -15,12 +15,25 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "lib": ["es2020", "dom"],
+    "lib": [
+      "ES2022",
+      "dom"
+    ],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "src/*"
+      ]
     }
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "lib", "es", "**/*.spec.ts", "**/*.test.ts"]
-} 
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "node_modules",
+    "lib",
+    "es",
+    "**/*.spec.ts",
+    "**/*.test.ts"
+  ]
+}
