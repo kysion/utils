@@ -48,10 +48,9 @@ let http = null;
 
 // 检查环境
 const isBrowser = typeof window !== 'undefined';
-const isTestEnv = process?.env?.NODE_ENV === 'test';
 
 // 只在浏览器环境中创建HTTP实例
-if (isBrowser && !isTestEnv) {
+if (isBrowser) {
     try {
         // 创建单例实例
         if (!HttpClient.instance) {
@@ -61,8 +60,8 @@ if (isBrowser && !isTestEnv) {
         } else {
             http = HttpClient.instance;
         }
-    } catch (error) {
-        console.warn('无法创建默认HTTP客户端实例:', error);
+    } catch (_) {
+        // console.info('无法创建默认HTTP客户端实例:');
     }
 } else {
     // 在非浏览器环境或测试环境中，不创建HTTP实例

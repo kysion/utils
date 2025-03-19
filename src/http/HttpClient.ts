@@ -56,7 +56,10 @@ export class HttpClient {
      * @param config 新的配置
      * @returns 更新后的HttpClient实例
      */
-    public static updateConfig(config: Partial<HttpRequestConfig>): HttpClient {
+    public static updateConfig(config: Partial<HttpRequestConfig> | ((config: HttpGlobalConfig) => Partial<HttpRequestConfig>)): HttpClient {
+        if (typeof config === 'function') {
+            config = config(getHttpConfig());
+        }
         if (!HttpClient.instance) {
             HttpClient.instance = new HttpClient(config);
         } else {
@@ -69,7 +72,10 @@ export class HttpClient {
      * 更新当前实例的配置
      * @param config 新的配置
      */
-    public updateConfig(config: Partial<HttpRequestConfig>): void {
+    public updateConfig(config: Partial<HttpRequestConfig> | ((config: HttpGlobalConfig) => Partial<HttpRequestConfig>)): void {
+        if (typeof config === 'function') {
+            config = config(getHttpConfig());
+        }
         // 更新配置
         this.config = { ...this.config, ...config };
 

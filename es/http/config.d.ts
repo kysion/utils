@@ -8,7 +8,7 @@ declare const defaultConfig: HttpGlobalConfig;
  * 配置HTTP客户端
  * @param config 配置对象
  */
-export declare function configureHttp(config: Partial<HttpGlobalConfig>): void;
+export declare function configureHttp(config: Partial<HttpGlobalConfig> | ((config: HttpGlobalConfig) => Partial<HttpGlobalConfig>)): void;
 /**
  * 重置为默认配置
  */

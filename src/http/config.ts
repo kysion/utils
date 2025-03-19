@@ -40,7 +40,10 @@ let globalConfig: HttpGlobalConfig = { ...defaultConfig };
  * 配置HTTP客户端
  * @param config 配置对象
  */
-export function configureHttp(config: Partial<HttpGlobalConfig>): void {
+export function configureHttp(config: Partial<HttpGlobalConfig> | ((config: HttpGlobalConfig) => Partial<HttpGlobalConfig>)): void {
+    if (typeof config === 'function') {
+        config = config(globalConfig);
+    }
     globalConfig = {
         ...globalConfig,
         ...config,

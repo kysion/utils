@@ -22,7 +22,7 @@ export declare class Funs {
      * @param def 默认值，当环境变量不存在时返回
      * @returns 环境变量值，如果未指定key则返回NODE_ENV
      */
-    static getEnv<T>(key?: string, def?: T): string | T | undefined;
+    static getEnv<T>(key?: string, def?: T, callback?: (v: any) => T): T;
     /**
      * 判断是否为开发环境
      * @param env_key 可选的环境变量键名

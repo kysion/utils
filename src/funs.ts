@@ -70,11 +70,10 @@ export class Funs {
    * @param def 默认值，当环境变量不存在时返回
    * @returns 环境变量值，如果未指定key则返回NODE_ENV
    */
-  public static getEnv<T>(key?: string, def?: T): string | T | undefined {
+  public static getEnv<T>(key?: string, def: T = undefined as any, callback?: (v: any) => T): T {
     // 获取环境变量对象
     const envObj = (
-      // @ts-ignore 使用globalThis.import替代直接访问import.meta
-      (typeof globalThis !== 'undefined' && globalThis.import && globalThis.import.meta?.env) ||
+      (typeof globalThis !== 'undefined' && (import.meta as any) && (import.meta as any).env) ||
       (typeof process !== 'undefined' && process.env) ||
       {}
     );
@@ -108,6 +107,10 @@ export class Funs {
         // @ts-ignore
         envObj[key] ||
         def;
+    }
+
+    if (callback) {
+      detectedValue = callback(detectedValue);
     }
 
     return detectedValue;

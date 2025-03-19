@@ -76,7 +76,7 @@ pnpm lint:fix
 pnpm test
 
 # 运行特定测试
-pnpm test utils/src/__tests__/http
+pnpm test src/__tests__/http
 ```
 
 测试覆盖率报告:

@@ -1,6 +1,6 @@
 {
   "name": "@kysion/utils",
-  "version": "1.0.0",
+  "version": "1.0.8",
   "description": "Kysion Admin实用工具库，提供HTTP请求增强、文件上传下载、多级缓存、增强的本地存储、数据加密解密和常用工具函数",
   "main": "lib/index.js",
   "module": "es/index.js",

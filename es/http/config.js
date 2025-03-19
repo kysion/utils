@@ -35,6 +35,9 @@ let globalConfig = { ...defaultConfig };
  * @param config 配置对象
  */
 export function configureHttp(config) {
+    if (typeof config === 'function') {
+        config = config(globalConfig);
+    }
     globalConfig = {
         ...globalConfig,
         ...config,

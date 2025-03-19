@@ -2,7 +2,7 @@
  * HTTP请求客户端类
  * 基于Axios封装，提供请求拦截、响应拦截、错误处理、请求取消、缓存等功能
  */
-import type { HttpRequestConfig, HttpResponse, RequestInterceptor, ResponseInterceptor, ErrorInterceptor } from './types';
+import type { HttpRequestConfig, HttpResponse, RequestInterceptor, ResponseInterceptor, ErrorInterceptor, HttpGlobalConfig } from './types';
 /**
  * HTTP客户端类
  */
@@ -25,12 +25,12 @@ export declare class HttpClient {
      * @param config 新的配置
      * @returns 更新后的HttpClient实例
      */
-    static updateConfig(config: Partial<HttpRequestConfig>): HttpClient;
+    static updateConfig(config: Partial<HttpRequestConfig> | ((config: HttpGlobalConfig) => Partial<HttpRequestConfig>)): HttpClient;
     /**
      * 更新当前实例的配置
      * @param config 新的配置
      */
-    updateConfig(config: Partial<HttpRequestConfig>): void;
+    updateConfig(config: Partial<HttpRequestConfig> | ((config: HttpGlobalConfig) => Partial<HttpRequestConfig>)): void;
     /**
      * 构造函数
      * @param config 实例配置
