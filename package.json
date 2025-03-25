@@ -2,21 +2,20 @@
   "name": "@kysion/utils",
   "version": "1.0.8",
   "description": "Kysion Admin实用工具库，提供HTTP请求增强、文件上传下载、多级缓存、增强的本地存储、数据加密解密和常用工具函数",
-  "main": "lib/index.js",
-  "module": "es/index.js",
-  "types": "lib/index.d.ts",
+  "main": "dist/lib/index.js",
+  "module": "dist/es/index.js",
+  "types": "dist/lib/index.d.ts",
   "files": [
-    "lib",
-    "es",
+    "dist",
     "README.md",
     "GUIDE.md"
   ],
   "scripts": {
     "build": "npm run clean && npm run build:lib && npm run build:es",
-    "build:lib": "tsc -p tsconfig.json",
+    "build:lib": "tsc -p tsconfig.build.json",
     "build:es": "tsc -p tsconfig.es.json",
     "build:test": "tsc -p tsconfig.test.json --noEmit",
-    "clean": "rm -rf lib es",
+    "clean": "rm -rf dist",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -38,7 +37,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
-    "@kysion/types": "file:../types",
+    "@kysion/types": "workspace:*",
     "axios": "^1.8.4",
     "colord": "^2.9.3",
     "crypto-js": "^4.2.0",
