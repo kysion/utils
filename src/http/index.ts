@@ -43,37 +43,14 @@ import type {
     ResumeInfo
 } from './types';
 
-// 创建默认的HTTP客户端实例
-let http = null;
-
-// 检查环境
-const isBrowser = typeof window !== 'undefined';
-
-// 只在浏览器环境中创建HTTP实例
-if (isBrowser) {
-    try {
-        // 创建单例实例
-        if (!HttpClient.instance) {
-            http = new HttpClient();
-            // 手动设置单例实例
-            HttpClient.instance = http;
-        } else {
-            http = HttpClient.instance;
-        }
-    } catch (_) {
-        // console.info('无法创建默认HTTP客户端实例:');
-    }
-} else {
-    // 在非浏览器环境或测试环境中，不创建HTTP实例
-    console.info('在非浏览器环境或测试环境中不创建HTTP客户端实例');
-}
-
 /**
  * 获取HttpClient实例
  * @param config 配置（可选）
  * @returns HttpClient实例
  */
 export const getHttpInstance = (config?: HttpRequestConfig): HttpClient => {
+    console.log('getHttpInstance=======>', config);
+    // 创建单例实例
     if (!HttpClient.instance) {
         HttpClient.instance = new HttpClient(config);
     }
@@ -86,6 +63,7 @@ export const getHttpInstance = (config?: HttpRequestConfig): HttpClient => {
  * @returns 更新后的HttpClient实例
  */
 export const updateHttpConfig = (config: Partial<HttpRequestConfig>): HttpClient => {
+    console.log('updateHttpConfig=======>', config);
     if (!HttpClient.instance) {
         HttpClient.instance = new HttpClient(config);
     } else {
@@ -93,6 +71,24 @@ export const updateHttpConfig = (config: Partial<HttpRequestConfig>): HttpClient
     }
     return HttpClient.instance;
 };
+
+// 创建默认的HTTP客户端实例
+let http = null;
+
+// 检查环境
+const isBrowser = typeof window !== 'undefined';
+
+// 只在浏览器环境中创建HTTP实例
+if (isBrowser) {
+    try {
+        http = getHttpInstance();
+    } catch (_) {
+        // console.info('无法创建默认HTTP客户端实例:');
+    }
+} else {
+    // 在非浏览器环境或测试环境中，不创建HTTP实例
+    console.info('在非浏览器环境或测试环境中不创建HTTP客户端实例');
+}
 
 // 导出http实例
 export { http };

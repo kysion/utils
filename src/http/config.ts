@@ -2,6 +2,7 @@
  * HTTP全局配置管理模块
  */
 
+import { Funs } from '../funs';
 import type { HttpGlobalConfig } from './types';
 
 // 默认错误消息
@@ -26,9 +27,10 @@ const defaultConfig: HttpGlobalConfig = {
         'Content-Type': 'application/json'
     },
     defaultLanguage: 'zh-CN',
-    debug: false,
+    debug: Funs.getEnv('APP_DEBUG_MODE', false),
     errorMessages: DEFAULT_ERROR_MESSAGES,
     defaultCacheTime: 5 * 60 * 1000, // 5分钟
+    defaultDebounceTime: 300, // 300ms 默认防抖时间
     getCurrentLanguage: () => localStorage.getItem('language') || 'zh-CN',
     getAuthToken: () => localStorage.getItem('token')
 };

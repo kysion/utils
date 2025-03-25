@@ -17,7 +17,7 @@ import type {
     ResumeInfo
 } from './types';
 import { setupDefaultInterceptors } from './interceptors';
-import { getCacheKey, getCache, setCache, clearCacheByUrl } from './cache';
+import { getCacheKey, getCache, clearCacheByUrl } from './cache';
 import { Funs } from '..';
 import { getHttpConfig } from './config';
 
@@ -27,7 +27,9 @@ import { getHttpConfig } from './config';
 export class HttpClient {
     // 单例实例
     public static instance: HttpClient | null = null;
-    private config: HttpRequestConfig;
+    // 单例状态
+    private static isDestroyed: boolean = false;
+    private config: HttpRequestConfig & { defaultDebounceTime?: number };
     // Axios实例
     private axiosInstance: AxiosInstance;
     // 请求拦截器列表
@@ -38,6 +40,21 @@ export class HttpClient {
     private errorInterceptors: ErrorInterceptor[] = [];
     // 取消请求的token映射
     private cancelTokenMap: Map<string, CancelTokenSource> = new Map();
+    // 请求防抖映射
+    private debounceMap: Map<string, {
+        timer: NodeJS.Timeout;
+        promise: Promise<HttpResponse<any> | any>;
+        resolve: (value: HttpResponse<any> | any) => void;
+        reject: (reason?: any) => void;
+        lastAccessTime: number;
+    }> = new Map();
+
+    // 映射过期时间（10分钟）
+    private readonly MAP_EXPIRY_TIME = 10 * 60 * 1000;
+    // 上次清理时间
+    private lastCleanupTime: number = Date.now();
+    // 清理间隔时间（5分钟）
+    private readonly CLEANUP_INTERVAL = 5 * 60 * 1000;
 
     /**
      * 获取HttpClient单例实例
@@ -45,8 +62,9 @@ export class HttpClient {
      * @returns HttpClient实例
      */
     public static getInstance(config?: HttpRequestConfig): HttpClient {
-        if (!HttpClient.instance) {
+        if (!HttpClient.instance || HttpClient.isDestroyed) {
             HttpClient.instance = new HttpClient(config);
+            HttpClient.isDestroyed = false;
         }
         return HttpClient.instance;
     }
@@ -129,6 +147,37 @@ export class HttpClient {
 
         // 添加全局拦截器
         this.addGlobalInterceptors(globalConfig);
+
+        // 添加清理拦截器
+        this.addRequestInterceptor(this.cleanupInterceptor);
+    }
+
+    /**
+     * 清理拦截器
+     */
+    private cleanupInterceptor: RequestInterceptor = (config) => {
+        const now = Date.now();
+        // 检查是否需要清理
+        if (now - this.lastCleanupTime > this.CLEANUP_INTERVAL) {
+            this.cleanupDebounceMap();
+            this.lastCleanupTime = now;
+        }
+        return config;
+    };
+
+    /**
+     * 清理过期的防抖映射
+     */
+    private cleanupDebounceMap(): void {
+        const now = Date.now();
+        for (const [key, value] of this.debounceMap.entries()) {
+            if (now - value.lastAccessTime > this.MAP_EXPIRY_TIME) {
+                // 清除定时器
+                clearTimeout(value.timer);
+                // 从映射中移除
+                this.debounceMap.delete(key);
+            }
+        }
     }
 
     /**
@@ -309,22 +358,118 @@ export class HttpClient {
     }
 
     /**
+     * 生成请求的唯一标识
+     * @param config 请求配置
+     * @returns 唯一标识
+     */
+    private generateRequestKey(config: HttpRequestConfig): string {
+        const { url, method, params, data } = config;
+        const key = `${method?.toUpperCase() || 'GET'}:${url}`;
+        const queryString = params ? new URLSearchParams(params).toString() : '';
+        const bodyString = data ? JSON.stringify(data) : '';
+        return `${key}?${queryString}#${bodyString}`;
+    }
+
+    /**
+     * 处理请求防抖
+     * @param config 请求配置
+     * @returns 处理后的请求配置
+     */
+    private async handleDebounce<T>(config: HttpRequestConfig): Promise<HttpResponse<T> | T> {
+        // 如果请求配置中明确设置了 debounce: false，则跳过防抖
+        if (config.debounce === false) {
+            return this.axiosInstance.request(config);
+        }
+
+        const debounceTime = config.debounceTime ?? this.config.defaultDebounceTime;
+
+        if (!debounceTime) return this.axiosInstance.request(config);
+
+        const requestKey = this.generateRequestKey(config);
+        const existingRequest = this.debounceMap.get(requestKey);
+
+        if (existingRequest) {
+            // 更新最后访问时间
+            existingRequest.lastAccessTime = Date.now();
+            // 清除之前的定时器
+            clearTimeout(existingRequest.timer);
+
+            // 创建新的定时器
+            existingRequest.timer = setTimeout(async () => {
+                try {
+                    const response = await this.axiosInstance.request<T>(config);
+                    existingRequest.resolve(response);
+                } catch (error) {
+                    existingRequest.reject(error);
+                } finally {
+                    this.debounceMap.delete(requestKey);
+                }
+            }, debounceTime);
+
+            // 返回之前的Promise
+            return existingRequest.promise as Promise<HttpResponse<T> | T>;
+        }
+
+        // 创建一个新的 Promise 和相关控制变量
+        let promiseControl: {
+            resolve: (value: HttpResponse<T> | T) => void;
+            reject: (reason?: any) => void;
+            timer: NodeJS.Timeout | null;
+        } = {
+            resolve: () => { },
+            reject: () => { },
+            timer: null
+        };
+
+        const promise = new Promise<HttpResponse<T> | T>((resolve, reject) => {
+            promiseControl.resolve = resolve;
+            promiseControl.reject = reject;
+        });
+
+        // 创建定时器
+        promiseControl.timer = setTimeout(async () => {
+            try {
+                const response = await this.axiosInstance.request<T>(config);
+                promiseControl.resolve(response);
+            } catch (error) {
+                promiseControl.reject(error);
+            } finally {
+                this.debounceMap.delete(requestKey);
+            }
+        }, debounceTime);
+
+        // 存储请求信息
+        this.debounceMap.set(requestKey, {
+            timer: promiseControl.timer,
+            promise,
+            resolve: promiseControl.resolve,
+            reject: promiseControl.reject,
+            lastAccessTime: Date.now()
+        });
+
+        return promise;
+    }
+
+    /**
+     * 判断是否是HTTP响应对象
+     * @param response 响应对象
+     * @returns 是否是HTTP响应对象
+     */
+    private isHttpResponse<T>(response: HttpResponse<T> | T): response is HttpResponse<T> {
+        return response && typeof response === 'object' && 'data' in response;
+    }
+
+    /**
      * 发送HTTP请求
      * @param config 请求配置
-     * @returns Promise
+     * @returns 响应数据
      */
     public async request<T = any>(config: HttpRequestConfig): Promise<HttpResponse<T> | T> {
         try {
-            const globalConfig = getHttpConfig();
-
-            // 检查缓存
-            if (config.useCache || config.cache) {
+            // 处理缓存
+            if (config.useCache) {
                 const cachedResponse = await this.handleCache<T>(config);
-                if (cachedResponse) {
-                    return config.returnResponse !== true && this.isApiResponse(cachedResponse.data)
-                        ? this.extractApiData(cachedResponse as HttpResponse<ApiResponse<any>>)
-                        : cachedResponse;
-                }
+                if (cachedResponse) return cachedResponse;
             }
 
             // 创建取消令牌
@@ -335,14 +480,8 @@ export class HttpClient {
                 }
             }
 
-            // 发送请求
-            const response = await this.axiosInstance.request<T, HttpResponse<T>>(config);
-
-            // 如果需要缓存，则保存响应
-            if (config.useCache || config.cache) {
-                const cacheKey = getCacheKey(config);
-                await setCache(cacheKey, response, config.cacheTime || globalConfig.defaultCacheTime);
-            }
+            // 处理防抖
+            const response = await this.handleDebounce<T>(config);
 
             // 如果有请求ID，请求完成后从映射中移除
             if (config.requestId) {
@@ -350,11 +489,11 @@ export class HttpClient {
             }
 
             // 默认情况下返回API数据部分，只有在明确要求时才返回完整响应
-            if (config.returnResponse === true || !response || !response.data || !this.isApiResponse(response.data)) {
+            if (config.returnResponse === true || !this.isHttpResponse(response) || !this.isApiResponse(response.data)) {
                 return response;
             }
 
-            return this.extractApiData(response as HttpResponse<ApiResponse<any>>);
+            return this.extractApiData(response as HttpResponse<ApiResponse<T>>);
         } catch (error: unknown) {
             // 处理错误
             if (axios.isCancel(error)) {
@@ -362,7 +501,7 @@ export class HttpClient {
             }
 
             // 尝试将错误转换为 AxiosError 类型
-            const axiosError = error as any;
+            const axiosError = error as AxiosError;
 
             // 检查是否存在 config 属性，并转换为 HttpRequestConfig
             if (axiosError && axiosError.config) {
@@ -1165,5 +1304,34 @@ export class HttpClient {
         // 清理
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+    }
+
+    /**
+     * 销毁实例
+     */
+    public destroy(): void {
+        // 清理所有防抖映射
+        for (const value of this.debounceMap.values()) {
+            clearTimeout(value.timer);
+        }
+        this.debounceMap.clear();
+
+        // 清理其他资源
+        this.cancelAll();
+
+        // 标记实例已销毁
+        HttpClient.isDestroyed = true;
+    }
+
+    /**
+     * 重置单例实例
+     * 用于在需要完全重置 HttpClient 状态时调用
+     */
+    public static reset(): void {
+        if (HttpClient.instance) {
+            HttpClient.instance.destroy();
+            HttpClient.instance = null;
+        }
+        HttpClient.isDestroyed = true;
     }
 }

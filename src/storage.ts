@@ -38,7 +38,7 @@ export type LocalStorageOptions = {
   /**
    * 可选的加密对象，用于对数据进行加密和解密
    */
-  crypto?: Crypto | true;
+  crypto: Crypto | boolean | undefined;
 };
 
 /**
@@ -46,7 +46,7 @@ export type LocalStorageOptions = {
  * @template T 存储数据的类型
  */
 export class LocalStorageWrapper<T> {
-  private crypto?: Crypto; // 用于加密的对象
+  private crypto: Crypto | undefined; // 用于加密的对象
   private storageKey: string; // 默认的存储键
   private keyPrefix: string; // 键的前缀
   private version: string | number; // 数据的版本
@@ -56,10 +56,12 @@ export class LocalStorageWrapper<T> {
    * @param params 包含键前缀、可选的加密对象、默认键和版本的参数对象
    */
   constructor(params: LocalStorageOptions) {
-    this.crypto = params.crypto === true ? createCrypto() : params.crypto ?? createCrypto();
+    this.crypto = params.crypto === true ? createCrypto() : (params.crypto === false ? undefined : createCrypto());
     this.storageKey = params.storageKey ?? ''; // 设置默认键
     this.keyPrefix = (params.keyPrefix ?? (APP_STORE_PREFIX ?? 'Kysion')) + '-'; // 设置键前缀
     this.version = params.version ?? APP_STORE_VERSION ?? 'v1.0.0'; // 设置版本
+
+    console.log('this.crypto', this.crypto);
   }
 
   /**

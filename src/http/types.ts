@@ -167,6 +167,11 @@ export interface HttpGlobalConfig {
      * 默认下载并发数
      */
     defaultDownloadConcurrency?: number;
+
+    /**
+     * 默认防抖时间（毫秒）
+     */
+    defaultDebounceTime?: number;
 }
 
 /**
@@ -188,6 +193,14 @@ export interface HttpRequestConfig extends AxiosRequestConfig {
     retryCount?: number;
     retryDelay?: number;
     useCache?: boolean;
+    /**
+     * 是否启用防抖，默认为 true
+     */
+    debounce?: boolean;
+    /**
+     * 防抖时间（毫秒）
+     */
+    debounceTime?: number;
     /**
      * 更高级的上传进度回调
      */
