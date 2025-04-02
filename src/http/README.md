@@ -108,7 +108,7 @@ configureHttp({
     // 认证失败回调
     onAuthFailed: () => {
         store.dispatch('auth/logout');
-        router.push('/login');
+        router.push('/auth/login');
     }
 });
 ```
