@@ -133,7 +133,7 @@ export function handleAuthFailed(): void {
     } else {
         // 默认行为：清除token并跳转到登录页
         localStorage.removeItem('token');
-        window.location.href = '/login';
+        window.location.href = '/auth/login';
     }
 }
 
