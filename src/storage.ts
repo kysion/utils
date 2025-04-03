@@ -80,8 +80,17 @@ export class LocalStorageWrapper<T> {
       version: this.version
     };
 
+    const replacer = (_: string, value: any) => {
+      if (typeof value === 'object' && value !== null) {
+        if (value instanceof HTMLElement) {
+          return undefined; // 过滤掉 DOM 元素
+        }
+      }
+      return value;
+    };
+
     // 将对象转换为 JSON 字符串
-    const jsonStr = JSON.stringify(data);
+    const jsonStr = JSON.stringify(data, replacer);
     // 如果不是开发环境且存在加密对象
     if (!isDev() && this.crypto) {
       // 对 JSON 字符串进行加密，并在加密完成后将加密后的数据存储到本地存储
