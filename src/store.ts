@@ -1,5 +1,5 @@
-import type { PersistOptions, PersistStorage, StorageValue } from 'zustand/middleware';
-import { persist } from 'zustand/middleware';
+import type { DevtoolsOptions, PersistOptions, PersistStorage, StorageValue } from 'zustand/middleware';
+import { persist, devtools } from 'zustand/middleware';
 import { StoreApi, UseBoundStore, create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { Funs, LocalStorageOptions, LocalStorageWrapper } from '.';
@@ -67,31 +67,55 @@ export const createSelectors = <S extends UseBoundStore<StoreApi<object>>>(
  */
 export function createKyStore<T extends object>(
     initialState: T,
-    persistOptions?: LocalStorageOptions & { version?: number }
+    persistOptions?: LocalStorageOptions & { version?: number },
+    devtoolsOptions?: DevtoolsOptions & { name: string }
 ) {
+    console.log('initialState', initialState.constructor.name);
     // 如果提供了 storageKey，则创建一个持久化的 store
     if (persistOptions) {
         const keyPrefix = Funs.getEnv('APP_STORE_PREFIX', 'Ky_');
         const storageKey = keyPrefix === persistOptions.storageKey ? '' : persistOptions.storageKey;
 
         return create<T>()(
-            immer(
-                persist(
-                    () => ({
-                        ...initialState, // 初始化状态
-                    }),
-                    {
-                        storage: createLocalStore({ ...persistOptions, keyPrefix: keyPrefix, storageKey }), // 使用 localStorage 进行存储
-                        version: persistOptions.version ?? 1
-                    } as PersistOptions<T> // 持久化选项
-                )
+            devtools(
+                immer(
+                    persist(
+                        () => ({
+                            ...initialState, // 初始化状态
+                        }),
+                        {
+                            storage: createLocalStore({ ...persistOptions, keyPrefix: keyPrefix, storageKey }), // 使用 localStorage 进行存储
+                            version: persistOptions.version ?? 1
+                        } as PersistOptions<T> // 持久化选项
+                    )
+                ),
+                {
+                    name: devtoolsOptions?.name ?? storageKey,
+                    enabled: true,
+                    trace: true,
+                    serialize: true,
+                    deserialize: true,
+                    ...devtoolsOptions
+                }
             )
         ) as UseBoundStore<StoreApi<T>>;
     }
     // 如果未提供 storageKey，则创建一个持久化的 store
     return create<T>()(
-        immer(() => ({
-            ...(initialState), // 初始化状态
-        }))
+        devtools(
+            immer(
+                () => ({
+                    ...(initialState), // 初始化状态
+                })
+            ),
+            {
+                name: devtoolsOptions?.name,
+                enabled: true,
+                trace: true,
+                serialize: true,
+                deserialize: true,
+                ...devtoolsOptions
+            }
+        )
     ) as UseBoundStore<StoreApi<T>>;
 }
