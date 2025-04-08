@@ -49,7 +49,6 @@ import type {
  * @returns HttpClient实例
  */
 export const getHttpInstance = (config?: HttpRequestConfig): HttpClient => {
-    console.log('getHttpInstance=======>', config);
     // 创建单例实例
     if (!HttpClient.instance) {
         HttpClient.instance = new HttpClient(config);
@@ -63,7 +62,6 @@ export const getHttpInstance = (config?: HttpRequestConfig): HttpClient => {
  * @returns 更新后的HttpClient实例
  */
 export const updateHttpConfig = (config: Partial<HttpRequestConfig>): HttpClient => {
-    console.log('updateHttpConfig=======>', config);
     if (!HttpClient.instance) {
         HttpClient.instance = new HttpClient(config);
     } else {

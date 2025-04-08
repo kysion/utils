@@ -70,7 +70,6 @@ export function createKyStore<T extends object>(
     persistOptions?: LocalStorageOptions & { version?: number },
     devtoolsOptions?: DevtoolsOptions & { name: string }
 ) {
-    console.log('initialState', initialState.constructor.name);
     // 如果提供了 storageKey，则创建一个持久化的 store
     if (persistOptions) {
         const keyPrefix = Funs.getEnv('APP_STORE_PREFIX', 'Ky_');

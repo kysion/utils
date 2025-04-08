@@ -23,8 +23,6 @@ function initHttpCache() {
 
     // 初始化HTTP缓存系统，使用增强的存储实现
     initWithEnhancedStorage(httpCacheStorage);
-
-    console.log('HTTP缓存系统已初始化，使用加密和版本控制');
 }
 
 /**
@@ -43,18 +41,14 @@ async function useHttpClientWithCache() {
         cacheTime: 3600000    // 缓存1小时
     });
 
-    console.log('用户数据已获取，如果有缓存则使用缓存数据');
-
     // 示例：强制刷新数据（跳过缓存）
     await httpClient.get('/api/users');
-    console.log('强制刷新用户数据');
 
     // 示例：POST请求通常不使用缓存
     await httpClient.post('/api/users', {
         name: '张三',
         email: 'zhangsan@example.com'
     });
-    console.log('新用户已创建');
 }
 
 // 导出函数，可以在应用启动时调用

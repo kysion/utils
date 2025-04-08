@@ -60,8 +60,6 @@ export class LocalStorageWrapper<T> {
     this.storageKey = params.storageKey ?? ''; // 设置默认键
     this.keyPrefix = (params.keyPrefix ?? (APP_STORE_PREFIX ?? 'Kysion')) + '-'; // 设置键前缀
     this.version = params.version ?? APP_STORE_VERSION ?? 'v1.0.0'; // 设置版本
-
-    console.log('this.crypto', this.crypto);
   }
 
   /**

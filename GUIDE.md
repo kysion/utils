@@ -14,6 +14,7 @@
 - [ID生成器](#id生成器)
 
 <a id="http请求模块"></a>
+
 ## HTTP请求模块
 
 HTTP请求模块基于Axios封装，提供了请求拦截、响应处理、错误处理、请求取消、自动重试和多级缓存等强大功能。
@@ -110,7 +111,6 @@ function setupHttpCache() {
   });
   
   initWithEnhancedStorage(httpCache);
-  console.log('HTTP缓存系统已配置');
 }
 ```
 
@@ -172,11 +172,9 @@ const result = await http.upload('/api/upload', file, {
   // 进度回调
   onUploadProgress: (event) => {
     const percent = Math.round((event.loaded / event.total) * 100);
-    console.log(`上传进度: ${percent}%`);
   }
 });
 
-console.log('上传完成，文件ID:', result.fileId);
 ```
 
 #### 增强的进度信息
@@ -381,6 +379,7 @@ http.cancelRequest(downloadRequestId);
 ```
 
 <a id="存储模块"></a>
+
 ## 存储模块
 
 存储模块提供了增强的本地存储功能，支持数据加密、版本控制和自动过期机制。
@@ -460,6 +459,7 @@ sessionStorage.put({
 ```
 
 <a id="模型存储"></a>
+
 ## 模型存储
 
 模型存储(ModelWithStorage)是一个用于将`BaseModel`与`LocalStorageWrapper`结合使用的工具类，为模型提供持久化存储能力。
@@ -563,6 +563,7 @@ class ProductCache extends ModelWithStorage<ProductCache> implements ILocalStora
 ```
 
 <a id="工具函数"></a>
+
 ## 工具函数
 
 Funs模块提供了一系列常用工具函数，涵盖环境检测、字符串处理、对象操作等领域。
@@ -634,6 +635,7 @@ console.log(merged);
 ```
 
 <a id="加密模块"></a>
+
 ## 加密模块
 
 加密模块提供了数据加密和解密功能。
@@ -658,6 +660,7 @@ const customEncrypted = customCrypto.encrypt('敏感数据');
 ```
 
 <a id="数据验证"></a>
+
 ## 数据验证
 
 数据验证模块提供了常用的验证功能。
@@ -692,6 +695,7 @@ if (Validate.isIp('192.168.1.1')) {
 ```
 
 <a id="id生成器"></a>
+
 ## ID生成器
 
 提供轻量级的唯一ID生成功能。
@@ -737,4 +741,4 @@ console.log(shortId); // 例如 'Wd9eT5a-'
 
 3. **数据过期设置**
    - 认证信息设置合理的过期时间
-   - 用户数据在退出登录时主动清除 
+   - 用户数据在退出登录时主动清除
