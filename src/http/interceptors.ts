@@ -74,6 +74,7 @@ export function responseInterceptor(response: HttpResponse<any>) {
     if (data.code !== 0 && data.code !== 200) {
         const errorMessage = getErrorMessage(data.code, data.message || 'Unknown error');
         const error = new Error(errorMessage);
+        (window as any).$message?.error(errorMessage);
         return Promise.reject(error);
     }
 
