@@ -1,6 +1,6 @@
 {
   "name": "@kysion/utils",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Kysion Admin实用工具库，提供HTTP请求增强、文件上传下载、多级缓存、增强的本地存储、数据加密解密和常用工具函数",
   "main": "dist/lib/index.js",
   "module": "dist/es/index.js",
@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "@kysion/types": "workspace:*",
-    "axios": "^1.9.0",
+    "axios": "^1.10.0",
     "colord": "^2.9.3",
     "crypto-js": "^4.2.0",
     "dayjs": "^1.11.13",
@@ -47,26 +47,20 @@
     "zustand": "^5.0.5"
   },
   "peerDependencies": {
-    "react": ">=19.1.0",
-    "typescript": ">=5.8.3"
+    "typescript": ">=5.8.3",
+    "react": ">=19.1.0"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.27.2",
     "@babel/preset-typescript": "^7.27.1",
     "@testing-library/react": "^16.3.0",
     "@types/crypto-js": "latest",
-    "@types/node": "^22.15.21",
-    "@types/react": "^19.1.5",
-    "msw": "^2.8.4",
+    "@types/node": "^24.0.3",
+    "@types/react": "^19.1.8",
+    "msw": "^2.10.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.8.3"
-  },
-  "overrides": {
-    "domexception": "^4.0.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "@types/react": "^19.1.5"
   }
 }
